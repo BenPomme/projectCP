@@ -47,11 +47,15 @@ export const register = async (email: string, password: string, displayName?: st
       id: userCredential.user.uid,
       email: userCredential.user.email!,
       displayName: userCredential.user.displayName || undefined,
-      photoURL: userCredential.user.photoURL || undefined,
       isAdmin: false,
       createdAt: new Date(),
       updatedAt: new Date()
     };
+
+    // Only add photoURL if it exists
+    if (userCredential.user.photoURL) {
+      user.photoURL = userCredential.user.photoURL;
+    }
     
     // Create user document in Firestore
     await setDoc(doc(db, 'users', user.id), user);
@@ -123,11 +127,15 @@ export const loginWithGoogle = async (): Promise<User> => {
         id: userCredential.user.uid,
         email: userCredential.user.email!,
         displayName: userCredential.user.displayName || undefined,
-        photoURL: userCredential.user.photoURL || undefined,
         isAdmin: false,
         createdAt: new Date(),
         updatedAt: new Date()
       };
+      
+      // Only add photoURL if it exists
+      if (userCredential.user.photoURL) {
+        user.photoURL = userCredential.user.photoURL;
+      }
       
       await setDoc(doc(db, 'users', user.id), user);
       trackEvent(AnalyticsEvents.USER_SIGNED_UP, { method: 'google' });
