@@ -25,10 +25,9 @@ export default function LoginForm() {
   };
 
   const handleGoogleLogin = async () => {
-    setError(null);
-    setLoading(true);
-
     try {
+      setLoading(true);
+      setError('');
       await loginWithGoogle();
       navigate('/dashboard');
     } catch (err: any) {

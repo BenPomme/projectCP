@@ -129,78 +129,55 @@ export const login = async (email: string, password: string): Promise<User> => {
 };
 
 // Login with Google
-export const loginWithGoogle = async (): Promise<User> => {
+export const loginWithGoogle = async () => {
   try {
-    // Configure Google provider
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({
       prompt: 'select_account',
-      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID
+      login_hint: 'user@gmail.com'
     });
-
-    // Add scopes
     provider.addScope('https://www.googleapis.com/auth/userinfo.email');
     provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
 
-    const userCredential = await signInWithPopup(auth, provider);
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
     
-    // Check if user exists in Firestore
-    const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+    // Get the ID token
+    const idToken = await user.getIdToken();
     
-    let userData: User;
-    
-    if (!userDoc.exists()) {
-      // Create new user document if it doesn't exist
-      userData = {
-        id: userCredential.user.uid,
-        email: userCredential.user.email!,
-        displayName: userCredential.user.displayName || undefined,
-        isAdmin: false,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      
-      // Only add photoURL if it exists
-      if (userCredential.user.photoURL) {
-        userData.photoURL = userCredential.user.photoURL;
-      }
-      
-      await setDoc(doc(db, 'users', userData.id), userData);
-      trackEvent(AnalyticsEvents.USER_SIGNED_UP, { method: 'google' });
-    } else {
-      userData = userDoc.data() as User;
-    }
-    
-    const token = await userCredential.user.getIdToken();
-    
-    // Update auth store
-    useAuthStore.getState().login(userData, token);
-    
+    // Update auth store with user data and token
+    useAuthStore.getState().login({
+      id: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+      photoURL: user.photoURL,
+      isAdmin: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }, idToken);
+
+    // Track successful login
     trackEvent(AnalyticsEvents.USER_SIGNED_IN, { method: 'google' });
-    return userData;
+
+    return user;
   } catch (error: any) {
     console.error('Google login error:', error);
     
-    let errorMessage = 'Failed to sign in with Google';
-    switch (error.code) {
-      case 'auth/popup-closed-by-user':
-        errorMessage = 'Sign in was cancelled';
-        break;
-      case 'auth/popup-blocked':
-        errorMessage = 'Sign in popup was blocked. Please allow popups for this site.';
-        break;
-      case 'auth/cancelled-popup-request':
-        errorMessage = 'Sign in was cancelled';
-        break;
-      default:
-        errorMessage = error.message || 'Failed to sign in with Google';
+    let errorMessage = 'Failed to login with Google';
+    if (error.code === 'auth/popup-closed-by-user') {
+      errorMessage = 'Login was cancelled';
+    } else if (error.code === 'auth/popup-blocked') {
+      errorMessage = 'Login popup was blocked. Please allow popups for this site.';
+    } else if (error.code === 'auth/cancelled-popup-request') {
+      errorMessage = 'Another login attempt is in progress';
     }
 
-    trackEvent(AnalyticsEvents.ERROR_OCCURRED, {
-      error_message: errorMessage,
-      error_code: error.code
+    // Track login error
+    trackEvent(AnalyticsEvents.ERROR_OCCURRED, { 
+      method: 'google',
+      error: errorMessage
     });
-    
+
     throw new Error(errorMessage);
   }
 };
