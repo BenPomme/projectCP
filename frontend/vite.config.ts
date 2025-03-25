@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   
   return {
     plugins: [react()],
-    base: '/BenPomme/projectCP/',
+    base: '/projectCP/',
     build: {
       outDir: 'dist',
       sourcemap: true,
