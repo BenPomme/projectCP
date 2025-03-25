@@ -26,11 +26,18 @@ jobs:
         run: |
           cd frontend
           npm ci
+          echo "Dependencies installed successfully"
           
       - name: Build
         run: |
           cd frontend
-          npm run build || (echo "Build failed" && exit 1)
+          echo "Starting build..."
+          npm run build
+          if [ $? -ne 0 ]; then
+            echo "Build failed with exit code $?"
+            exit 1
+          fi
+          echo "Build completed successfully"
           
       - name: Setup Pages
         uses: actions/configure-pages@v3
