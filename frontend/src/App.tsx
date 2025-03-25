@@ -1,23 +1,43 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useAuthStore } from './store/authStore';
+import { useAuth } from './hooks/useAuth';
 import MainLayout from './components/layout/MainLayout';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
+import LoginForm from './components/auth/LoginForm';
+import RegisterForm from './components/auth/RegisterForm';
+import ResetPasswordForm from './components/auth/ResetPasswordForm';
+import ProfilePage from './pages/ProfilePage';
 import ErrorBoundary from './components/ErrorBoundary';
 
 // Create a client
 const queryClient = new QueryClient();
 
-function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore();
-  return isAuthenticated ? children : <Navigate to="/login" />;
-}
+const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+  
+  return user ? <>{children}</> : <Navigate to="/login" />;
+};
 
-function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated } = useAuthStore();
-  return isAuthenticated && user?.isAdmin ? children : <Navigate to="/" />;
-}
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+  
+  return user?.isAdmin ? <>{children}</> : <Navigate to="/" />;
+};
 
 function App() {
   return (
@@ -28,8 +48,9 @@ function App() {
             <Route path="/" element={<MainLayout />}>
               {/* Public routes */}
               <Route index element={<div>Home Page</div>} />
-              <Route path="login" element={<LoginPage />} />
-              <Route path="register" element={<RegisterPage />} />
+              <Route path="login" element={<LoginForm />} />
+              <Route path="register" element={<RegisterForm />} />
+              <Route path="reset-password" element={<ResetPasswordForm />} />
               <Route path="winners" element={<div>Winners Page</div>} />
 
               {/* Protected routes */}
@@ -53,7 +74,7 @@ function App() {
                 path="profile"
                 element={
                   <PrivateRoute>
-                    <div>Profile Page</div>
+                    <ProfilePage />
                   </PrivateRoute>
                 }
               />
