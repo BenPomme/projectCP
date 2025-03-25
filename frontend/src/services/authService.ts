@@ -71,6 +71,17 @@ export const register = async (email: string, password: string, displayName?: st
       // Just log the error for debugging
     }
     
+    // Get token and update auth store - THIS IS THE KEY FIX
+    try {
+      const token = await userCredential.user.getIdToken();
+      console.log('Got ID token for new user');
+      useAuthStore.getState().login(user, token);
+      console.log('Updated auth store after registration');
+    } catch (tokenError: any) {
+      console.error('Error getting token:', tokenError);
+      // Still don't throw, as the user is created
+    }
+    
     trackEvent(AnalyticsEvents.USER_SIGNED_UP);
     return user;
   } catch (error: any) {
@@ -106,27 +117,91 @@ export const register = async (email: string, password: string, displayName?: st
 // Login with email and password
 export const login = async (email: string, password: string): Promise<User> => {
   try {
+    console.log('Attempting to login with email:', email);
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+    console.log('Login successful, fetching user data');
     
-    if (!userDoc.exists()) {
-      throw new Error('User document not found');
+    let userData: User;
+    
+    try {
+      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+      
+      if (!userDoc.exists()) {
+        console.log('User document not found, creating one');
+        // Create user document if it doesn't exist (fallback)
+        userData = {
+          id: userCredential.user.uid,
+          email: userCredential.user.email!,
+          displayName: userCredential.user.displayName || undefined,
+          isAdmin: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        
+        // Only add photoURL if it exists
+        if (userCredential.user.photoURL) {
+          userData.photoURL = userCredential.user.photoURL;
+        }
+        
+        await setDoc(doc(db, 'users', userData.id), userData);
+      } else {
+        console.log('User document found');
+        userData = userDoc.data() as User;
+      }
+    } catch (firestoreError) {
+      console.error('Error fetching/creating user document:', firestoreError);
+      // Fallback to basic user data if Firestore fails
+      userData = {
+        id: userCredential.user.uid,
+        email: userCredential.user.email!,
+        displayName: userCredential.user.displayName || undefined,
+        photoURL: userCredential.user.photoURL || undefined,
+        isAdmin: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
     }
     
-    const userData = userDoc.data() as User;
+    // Get token
     const token = await userCredential.user.getIdToken();
+    console.log('Got ID token');
     
     // Update auth store
     useAuthStore.getState().login(userData, token);
+    console.log('Updated auth store');
     
     trackEvent(AnalyticsEvents.USER_SIGNED_IN);
     return userData;
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Login error:', error);
+    let errorMessage = 'Failed to login';
+    
+    switch (error.code) {
+      case 'auth/invalid-email':
+        errorMessage = 'Invalid email format';
+        break;
+      case 'auth/user-disabled':
+        errorMessage = 'This account has been disabled';
+        break;
+      case 'auth/user-not-found':
+        errorMessage = 'No account found with this email';
+        break;
+      case 'auth/wrong-password':
+        errorMessage = 'Incorrect password';
+        break;
+      case 'auth/too-many-requests':
+        errorMessage = 'Too many failed login attempts. Please try again later.';
+        break;
+      default:
+        errorMessage = error.message || 'Failed to login';
+    }
+    
     trackEvent(AnalyticsEvents.ERROR_OCCURRED, {
-      error_message: error.message,
+      error_message: errorMessage,
       error_code: error.code
     });
-    throw error;
+    
+    throw new Error(errorMessage);
   }
 };
 

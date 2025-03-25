@@ -3,42 +3,73 @@ import { useNavigate, Link } from 'react-router-dom';
 import { register } from '../../services/authService';
 
 export default function RegisterForm() {
-  const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    confirmPassword: '',
-    displayName: ''
-  });
-  const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-
-    if (formData.password !== formData.confirmPassword) {
+    
+    // Form validation
+    if (!email || !password || !confirmPassword) {
+      setError('Please fill out all required fields');
+      return;
+    }
+    
+    if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-
-    setLoading(true);
-
+    
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return;
+    }
+    
     try {
-      await register(formData.email, formData.password, formData.displayName);
-      navigate('/projectCP/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Failed to register');
+      setLoading(true);
+      setError('');
+      console.log('Attempting registration with email:', email);
+      
+      try {
+        await register(email, password, displayName || undefined);
+        console.log('Registration successful, navigating to dashboard');
+        navigate('/dashboard');
+      } catch (err: any) {
+        console.error('Registration error:', err);
+        
+        // If email already in use, suggest login
+        if (err.message && err.message.includes('already registered')) {
+          setError('This email is already registered. Please log in instead.');
+        } else {
+          setError(err.message || 'Failed to register');
+        }
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    const { name, value } = e.target;
+    switch (name) {
+      case 'email':
+        setEmail(value);
+        break;
+      case 'password':
+        setPassword(value);
+        break;
+      case 'confirmPassword':
+        setConfirmPassword(value);
+        break;
+      case 'displayName':
+        setDisplayName(value);
+        break;
+    }
   };
 
   return (
@@ -50,7 +81,7 @@ export default function RegisterForm() {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Or{' '}
-            <Link to="/projectCP/login" className="font-medium text-primary-600 hover:text-primary-500">
+            <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500">
               sign in to your account
             </Link>
           </p>
@@ -73,7 +104,7 @@ export default function RegisterForm() {
                 autoComplete="name"
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
                 placeholder="Display Name"
-                value={formData.displayName}
+                value={displayName}
                 onChange={handleChange}
               />
             </div>
@@ -89,7 +120,7 @@ export default function RegisterForm() {
                 required
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
                 placeholder="Email address"
-                value={formData.email}
+                value={email}
                 onChange={handleChange}
               />
             </div>
@@ -105,7 +136,7 @@ export default function RegisterForm() {
                 required
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
                 placeholder="Password"
-                value={formData.password}
+                value={password}
                 onChange={handleChange}
               />
             </div>
@@ -121,7 +152,7 @@ export default function RegisterForm() {
                 required
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
                 placeholder="Confirm Password"
-                value={formData.confirmPassword}
+                value={confirmPassword}
                 onChange={handleChange}
               />
             </div>
