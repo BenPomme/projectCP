@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { User } from '../services/authService';
 import { onAuthStateChange, getCurrentUser } from '../services/authService';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -12,17 +14,14 @@ export function useAuth() {
     const unsubscribe = onAuthStateChange(async (firebaseUser: FirebaseUser | null) => {
       try {
         if (firebaseUser) {
-          const currentUser = await getCurrentUser();
-          if (currentUser) {
-            setUser({
-              id: currentUser.uid,
-              email: currentUser.email!,
-              displayName: currentUser.displayName || undefined,
-              photoURL: currentUser.photoURL || undefined,
-              isAdmin: false, // You'll need to fetch this from Firestore
-              createdAt: new Date(),
-              updatedAt: new Date()
-            });
+          // Get user document from Firestore
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data() as User;
+            setUser(userData);
+          } else {
+            setUser(null);
           }
         } else {
           setUser(null);
@@ -41,6 +40,7 @@ export function useAuth() {
     user,
     loading,
     error,
-    isAuthenticated: !!user
+    isAuthenticated: !!user,
+    isAdmin: user?.isAdmin || false
   };
 } 

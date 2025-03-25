@@ -6,6 +6,7 @@ import LoginForm from './components/auth/LoginForm';
 import RegisterForm from './components/auth/RegisterForm';
 import ResetPasswordForm from './components/auth/ResetPasswordForm';
 import ProfilePage from './pages/ProfilePage';
+import AdminDashboard from './components/admin/AdminDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 
 // Create a client
@@ -84,7 +85,7 @@ function App() {
                 path="admin"
                 element={
                   <AdminRoute>
-                    <div>Admin Dashboard</div>
+                    <AdminDashboard />
                   </AdminRoute>
                 }
               />
