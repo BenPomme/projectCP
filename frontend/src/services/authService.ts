@@ -131,7 +131,18 @@ export const login = async (email: string, password: string): Promise<User> => {
 // Login with Google
 export const loginWithGoogle = async (): Promise<User> => {
   try {
-    const userCredential = await signInWithPopup(auth, googleProvider);
+    // Configure Google provider
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({
+      prompt: 'select_account',
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID
+    });
+
+    // Add scopes
+    provider.addScope('https://www.googleapis.com/auth/userinfo.email');
+    provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
+
+    const userCredential = await signInWithPopup(auth, provider);
     
     // Check if user exists in Firestore
     const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
@@ -167,13 +178,30 @@ export const loginWithGoogle = async (): Promise<User> => {
     
     trackEvent(AnalyticsEvents.USER_SIGNED_IN, { method: 'google' });
     return userData;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Google login error:', error);
+    
+    let errorMessage = 'Failed to sign in with Google';
+    switch (error.code) {
+      case 'auth/popup-closed-by-user':
+        errorMessage = 'Sign in was cancelled';
+        break;
+      case 'auth/popup-blocked':
+        errorMessage = 'Sign in popup was blocked. Please allow popups for this site.';
+        break;
+      case 'auth/cancelled-popup-request':
+        errorMessage = 'Sign in was cancelled';
+        break;
+      default:
+        errorMessage = error.message || 'Failed to sign in with Google';
+    }
+
     trackEvent(AnalyticsEvents.ERROR_OCCURRED, {
-      error_message: error.message,
+      error_message: errorMessage,
       error_code: error.code
     });
-    throw error;
+    
+    throw new Error(errorMessage);
   }
 };
 
