@@ -26,6 +26,16 @@ export interface User {
 // Register with email and password
 export const register = async (email: string, password: string, displayName?: string): Promise<User> => {
   try {
+    // Validate email format
+    if (!email || !email.includes('@')) {
+      throw new Error('Invalid email format');
+    }
+
+    // Validate password strength
+    if (!password || password.length < 6) {
+      throw new Error('Password must be at least 6 characters long');
+    }
+
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     
     // Update profile if displayName is provided
@@ -48,12 +58,32 @@ export const register = async (email: string, password: string, displayName?: st
     
     trackEvent(AnalyticsEvents.USER_SIGNED_UP);
     return user;
-  } catch (error) {
+  } catch (error: any) {
+    let errorMessage = 'Failed to register';
+    
+    switch (error.code) {
+      case 'auth/email-already-in-use':
+        errorMessage = 'This email is already registered';
+        break;
+      case 'auth/invalid-email':
+        errorMessage = 'Invalid email format';
+        break;
+      case 'auth/operation-not-allowed':
+        errorMessage = 'Email/password accounts are not enabled. Please contact support.';
+        break;
+      case 'auth/weak-password':
+        errorMessage = 'Password should be at least 6 characters';
+        break;
+      default:
+        errorMessage = error.message || 'Failed to register';
+    }
+
     trackEvent(AnalyticsEvents.ERROR_OCCURRED, {
-      error_message: error.message,
+      error_message: errorMessage,
       error_code: error.code
     });
-    throw error;
+    
+    throw new Error(errorMessage);
   }
 };
 
