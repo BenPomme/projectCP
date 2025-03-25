@@ -106,16 +106,16 @@ export default function TournamentSettingsPage() {
       setSuccess(null);
 
       const now = new Date();
-      let submissionEnd = tournamentState?.submissionPhaseEnd || new Date();
-      let votingEnd = tournamentState?.votingPhaseEnd || new Date();
+      let submissionPhaseEnd = tournamentState?.submissionPhaseEnd || new Date();
+      let votingPhaseEnd = tournamentState?.votingPhaseEnd || new Date();
 
       if (phase === 'submission') {
-        submissionEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-        votingEnd = new Date(submissionEnd.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days after submission
+        submissionPhaseEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+        votingPhaseEnd = new Date(submissionPhaseEnd.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days after submission
       } else if (phase === 'voting') {
         if (phase !== tournamentState?.currentPhase) {
           // Only update votingEnd if we're changing to voting phase
-          votingEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+          votingPhaseEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
         }
       }
 
