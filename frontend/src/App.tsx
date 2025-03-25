@@ -14,6 +14,7 @@ import DashboardPage from './pages/DashboardPage';
 import SubmitDesignPage from './pages/SubmitDesignPage';
 import VotePage from './pages/VotePage';
 import WinnersPage from './pages/WinnersPage';
+import DebugAuthPage from './pages/DebugAuthPage';
 import { useEffect } from 'react';
 import { handleRedirectResult } from './services/authService';
 
@@ -66,6 +67,7 @@ function App() {
               <Route path="register" element={<RegisterForm />} />
               <Route path="reset-password" element={<ResetPasswordForm />} />
               <Route path="winners" element={<WinnersPage />} />
+              <Route path="debug-auth" element={<DebugAuthPage />} />
 
               {/* Protected routes */}
               <Route
