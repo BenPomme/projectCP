@@ -9,6 +9,7 @@ import ProfilePage from './pages/ProfilePage';
 import AdminDashboard from './components/admin/AdminDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import TournamentSettingsPage from './pages/admin/TournamentSettingsPage';
+import HomePage from './pages/HomePage';
 import { useEffect } from 'react';
 import { handleRedirectResult } from './services/authService';
 
@@ -26,7 +27,7 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
   
-  return user ? <>{children}</> : <Navigate to="/projectCP/login" />;
+  return user ? <>{children}</> : <Navigate to="/login" />;
 };
 
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
@@ -40,7 +41,7 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
   
-  return user?.isAdmin ? <>{children}</> : <Navigate to="/projectCP" />;
+  return user?.isAdmin ? <>{children}</> : <Navigate to="/" />;
 };
 
 function App() {
@@ -56,7 +57,7 @@ function App() {
           <Routes>
             <Route path="/" element={<MainLayout />}>
               {/* Public routes */}
-              <Route index element={<div>Home Page</div>} />
+              <Route index element={<HomePage />} />
               <Route path="login" element={<LoginForm />} />
               <Route path="register" element={<RegisterForm />} />
               <Route path="reset-password" element={<ResetPasswordForm />} />
@@ -87,6 +88,14 @@ function App() {
                   </PrivateRoute>
                 }
               />
+              <Route
+                path="dashboard"
+                element={
+                  <PrivateRoute>
+                    <div>Dashboard Page</div>
+                  </PrivateRoute>
+                }
+              />
 
               {/* Admin routes */}
               <Route
@@ -94,6 +103,22 @@ function App() {
                 element={
                   <AdminRoute>
                     <AdminDashboard />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="admin/entries"
+                element={
+                  <AdminRoute>
+                    <div>Admin Entries Page</div>
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="admin/settings"
+                element={
+                  <AdminRoute>
+                    <TournamentSettingsPage />
                   </AdminRoute>
                 }
               />

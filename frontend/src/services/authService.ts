@@ -213,6 +213,9 @@ export const handleRedirectResult = async () => {
       
       trackEvent(AnalyticsEvents.USER_SIGNED_IN, { method: 'google' });
       
+      // Navigate to dashboard after successful login
+      window.location.href = '/projectCP/dashboard';
+      
       return userData;
     }
     return null;
