@@ -12,6 +12,7 @@ import {
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../config/firebase';
 import { trackEvent, AnalyticsEvents } from '../utils/analytics';
+import { useAuthStore } from '../store/authStore';
 
 export interface User {
   id: string;
@@ -110,8 +111,14 @@ export const login = async (email: string, password: string): Promise<User> => {
       throw new Error('User document not found');
     }
     
+    const userData = userDoc.data() as User;
+    const token = await userCredential.user.getIdToken();
+    
+    // Update auth store
+    useAuthStore.getState().login(userData, token);
+    
     trackEvent(AnalyticsEvents.USER_SIGNED_IN);
-    return userDoc.data() as User;
+    return userData;
   } catch (error) {
     trackEvent(AnalyticsEvents.ERROR_OCCURRED, {
       error_message: error.message,
@@ -129,9 +136,11 @@ export const loginWithGoogle = async (): Promise<User> => {
     // Check if user exists in Firestore
     const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
     
+    let userData: User;
+    
     if (!userDoc.exists()) {
       // Create new user document if it doesn't exist
-      const user: User = {
+      userData = {
         id: userCredential.user.uid,
         email: userCredential.user.email!,
         displayName: userCredential.user.displayName || undefined,
@@ -142,15 +151,22 @@ export const loginWithGoogle = async (): Promise<User> => {
       
       // Only add photoURL if it exists
       if (userCredential.user.photoURL) {
-        user.photoURL = userCredential.user.photoURL;
+        userData.photoURL = userCredential.user.photoURL;
       }
       
-      await setDoc(doc(db, 'users', user.id), user);
+      await setDoc(doc(db, 'users', userData.id), userData);
       trackEvent(AnalyticsEvents.USER_SIGNED_UP, { method: 'google' });
+    } else {
+      userData = userDoc.data() as User;
     }
     
+    const token = await userCredential.user.getIdToken();
+    
+    // Update auth store
+    useAuthStore.getState().login(userData, token);
+    
     trackEvent(AnalyticsEvents.USER_SIGNED_IN, { method: 'google' });
-    return userDoc.exists() ? userDoc.data() as User : user;
+    return userData;
   } catch (error) {
     console.error('Google login error:', error);
     trackEvent(AnalyticsEvents.ERROR_OCCURRED, {
@@ -165,6 +181,7 @@ export const loginWithGoogle = async (): Promise<User> => {
 export const logout = async (): Promise<void> => {
   try {
     await signOut(auth);
+    useAuthStore.getState().logout();
     trackEvent(AnalyticsEvents.USER_SIGNED_OUT);
   } catch (error) {
     trackEvent(AnalyticsEvents.ERROR_OCCURRED, {
