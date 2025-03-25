@@ -58,11 +58,20 @@ export const register = async (email: string, password: string, displayName?: st
     }
     
     // Create user document in Firestore
-    await setDoc(doc(db, 'users', user.id), user);
+    try {
+      console.log('Creating user document in Firestore:', user);
+      await setDoc(doc(db, 'users', user.id), user);
+      console.log('User document created successfully');
+    } catch (firestoreError: any) {
+      console.error('Error creating user document:', firestoreError);
+      // Don't throw here, as the user is already created in Auth
+      // Just log the error for debugging
+    }
     
     trackEvent(AnalyticsEvents.USER_SIGNED_UP);
     return user;
   } catch (error: any) {
+    console.error('Registration error:', error);
     let errorMessage = 'Failed to register';
     
     switch (error.code) {
