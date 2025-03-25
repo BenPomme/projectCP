@@ -7,7 +7,9 @@ import {
   signInWithPopup,
   sendPasswordResetEmail,
   updateProfile,
-  User as FirebaseUser
+  User as FirebaseUser,
+  signInWithRedirect,
+  getRedirectResult
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../config/firebase';
@@ -132,34 +134,21 @@ export const login = async (email: string, password: string): Promise<User> => {
 export const loginWithGoogle = async () => {
   try {
     const provider = new GoogleAuthProvider();
+    
+    // Configure proper OAuth behavior
     provider.setCustomParameters({
       prompt: 'select_account',
       login_hint: 'user@gmail.com'
     });
+    
+    // Add required scopes
     provider.addScope('https://www.googleapis.com/auth/userinfo.email');
     provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
 
-    const result = await signInWithPopup(auth, provider);
-    const user = result.user;
+    // Use signInWithRedirect instead of popup to avoid COOP issues
+    await signInWithRedirect(auth, provider);
     
-    // Get the ID token
-    const idToken = await user.getIdToken();
-    
-    // Update auth store with user data and token
-    useAuthStore.getState().login({
-      id: user.uid,
-      email: user.email,
-      displayName: user.displayName,
-      photoURL: user.photoURL,
-      isAdmin: false,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }, idToken);
-
-    // Track successful login
-    trackEvent(AnalyticsEvents.USER_SIGNED_IN, { method: 'google' });
-
-    return user;
+    return null; // The redirect will happen, so no return value is needed
   } catch (error: any) {
     console.error('Google login error:', error);
     
@@ -179,6 +168,57 @@ export const loginWithGoogle = async () => {
     });
 
     throw new Error(errorMessage);
+  }
+};
+
+// Add a function to handle redirect result
+export const handleRedirectResult = async () => {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result) {
+      const user = result.user;
+      
+      // Get the ID token
+      const idToken = await user.getIdToken();
+      
+      // Check if user exists in Firestore
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      
+      let userData: User;
+      
+      if (!userDoc.exists()) {
+        // Create new user document if it doesn't exist
+        userData = {
+          id: user.uid,
+          email: user.email!,
+          displayName: user.displayName || undefined,
+          isAdmin: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        
+        // Only add photoURL if it exists
+        if (user.photoURL) {
+          userData.photoURL = user.photoURL;
+        }
+        
+        await setDoc(doc(db, 'users', userData.id), userData);
+        trackEvent(AnalyticsEvents.USER_SIGNED_UP, { method: 'google' });
+      } else {
+        userData = userDoc.data() as User;
+      }
+      
+      // Update auth store
+      useAuthStore.getState().login(userData, idToken);
+      
+      trackEvent(AnalyticsEvents.USER_SIGNED_IN, { method: 'google' });
+      
+      return userData;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error handling redirect result:', error);
+    return null;
   }
 };
 

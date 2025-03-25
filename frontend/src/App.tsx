@@ -9,6 +9,8 @@ import ProfilePage from './pages/ProfilePage';
 import AdminDashboard from './components/admin/AdminDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import TournamentSettingsPage from './pages/admin/TournamentSettingsPage';
+import { useEffect } from 'react';
+import { handleRedirectResult } from './services/authService';
 
 // Create a client
 const queryClient = new QueryClient();
@@ -42,6 +44,11 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
+  useEffect(() => {
+    // Handle the redirect result from Google sign-in
+    handleRedirectResult();
+  }, []);
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

@@ -25,15 +25,12 @@ export default function LoginForm() {
   };
 
   const handleGoogleLogin = async () => {
+    setError('');
     try {
-      setLoading(true);
-      setError('');
       await loginWithGoogle();
-      navigate('/dashboard');
+      // No need to navigate here as we're using redirect
     } catch (err: any) {
       setError(err.message || 'Failed to login with Google');
-    } finally {
-      setLoading(false);
     }
   };
 

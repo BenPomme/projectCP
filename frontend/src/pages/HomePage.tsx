@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { Entry, getTournamentState } from '../services/firebase';
+import { Entry, getTournamentState, initializeTournamentState } from '../services/firebase';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function HomePage() {
@@ -16,7 +16,14 @@ export default function HomePage() {
     const fetchData = async () => {
       try {
         // Fetch tournament state
-        const state = await getTournamentState();
+        let state = await getTournamentState();
+        
+        // Initialize tournament state if it doesn't exist
+        if (!state) {
+          await initializeTournamentState();
+          state = await getTournamentState();
+        }
+        
         setTournamentState(state);
 
         // Fetch recent entries
@@ -51,6 +58,32 @@ export default function HomePage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      {user?.isAdmin && (
+        <div className="mb-8 bg-white shadow rounded-lg p-4">
+          <h2 className="text-lg font-medium text-gray-900 mb-2">Admin Quick Links</h2>
+          <div className="flex space-x-4">
+            <Link
+              to="/admin"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+            >
+              Admin Dashboard
+            </Link>
+            <Link
+              to="/admin/entries"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+            >
+              Manage Entries
+            </Link>
+            <Link
+              to="/admin/settings"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+            >
+              Tournament Settings
+            </Link>
+          </div>
+        </div>
+      )}
+      
       <div className="text-center">
         <h1 className="text-4xl font-bold text-gray-900 sm:text-5xl md:text-6xl">
           Welcome to the King Ideation Tournament
