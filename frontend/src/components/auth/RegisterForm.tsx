@@ -26,7 +26,7 @@ export default function RegisterForm() {
 
     try {
       await register(formData.email, formData.password, formData.displayName);
-      navigate('/dashboard');
+      navigate('/projectCP/dashboard');
     } catch (err: any) {
       setError(err.message || 'Failed to register');
     } finally {
@@ -50,7 +50,7 @@ export default function RegisterForm() {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Or{' '}
-            <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500">
+            <Link to="/projectCP/login" className="font-medium text-primary-600 hover:text-primary-500">
               sign in to your account
             </Link>
           </p>
@@ -131,7 +131,7 @@ export default function RegisterForm() {
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Creating account...' : 'Create account'}
             </button>

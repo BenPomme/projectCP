@@ -22,7 +22,7 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
   
-  return user ? <>{children}</> : <Navigate to="/login" />;
+  return user ? <>{children}</> : <Navigate to="/projectCP/login" />;
 };
 
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
@@ -36,14 +36,14 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
   
-  return user?.isAdmin ? <>{children}</> : <Navigate to="/" />;
+  return user?.isAdmin ? <>{children}</> : <Navigate to="/projectCP" />;
 };
 
 function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <Router>
+        <Router basename="/projectCP">
           <Routes>
             <Route path="/" element={<MainLayout />}>
               {/* Public routes */}
