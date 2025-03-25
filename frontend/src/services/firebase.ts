@@ -205,23 +205,30 @@ export const getTournamentState = async (): Promise<TournamentState | null> => {
 
 export const updateTournamentState = async (state: Partial<TournamentState>): Promise<void> => {
   const docRef = doc(db, 'tournament', 'current');
-  await setDoc(docRef, {
+  const docSnap = await getDoc(docRef);
+  
+  if (!docSnap.exists()) {
+    await initializeTournamentState();
+  }
+  
+  await updateDoc(docRef, {
     ...state,
-    updatedAt: new Date()
-  }, { merge: true });
+    updatedAt: Timestamp.now()
+  });
 };
 
 export const initializeTournamentState = async (): Promise<void> => {
-  const docRef = doc(db, 'tournament', 'current');
+  // Set default tournament state with current phase as submission
+  // Set submission phase to end in 7 days, voting phase to end in 14 days
   const now = new Date();
-  const submissionEnd = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000); // 2 days from now
-  const votingEnd = new Date(submissionEnd.getTime() + 2 * 24 * 60 * 60 * 1000); // 2 days after submission ends
-
-  await setDoc(docRef, {
+  const submissionEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const votingEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+  
+  await setDoc(doc(db, 'tournament', 'current'), {
     currentPhase: 'submission',
-    submissionPhaseEnd: submissionEnd,
-    votingPhaseEnd: votingEnd,
-    createdAt: now,
-    updatedAt: now
+    submissionPhaseEnd: Timestamp.fromDate(submissionEnd),
+    votingPhaseEnd: Timestamp.fromDate(votingEnd),
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now()
   });
 }; 

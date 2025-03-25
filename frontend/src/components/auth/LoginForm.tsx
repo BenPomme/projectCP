@@ -3,21 +3,29 @@ import { useNavigate, Link } from 'react-router-dom';
 import { login, loginWithGoogle } from '../../services/authService';
 
 export default function LoginForm() {
-  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setLoading(true);
-
+    
+    if (!email || !password) {
+      setError('Please enter both email and password');
+      return;
+    }
+    
     try {
+      setLoading(true);
+      setError('');
+      console.log('Attempting login with email:', email);
       await login(email, password);
+      console.log('Login successful, navigating to dashboard');
       navigate('/dashboard');
     } catch (err: any) {
+      console.error('Login form error:', err);
       setError(err.message || 'Failed to login');
     } finally {
       setLoading(false);
@@ -27,9 +35,11 @@ export default function LoginForm() {
   const handleGoogleLogin = async () => {
     setError('');
     try {
+      console.log('Attempting Google login');
       await loginWithGoogle();
       // No need to navigate here as we're using redirect
     } catch (err: any) {
+      console.error('Google login error:', err);
       setError(err.message || 'Failed to login with Google');
     }
   };
@@ -48,7 +58,7 @@ export default function LoginForm() {
             </Link>
           </p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleEmailLogin}>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
             <div className="rounded-md bg-red-50 p-4">
               <div className="text-sm text-red-700">{error}</div>

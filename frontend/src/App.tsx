@@ -9,6 +9,7 @@ import ProfilePage from './pages/ProfilePage';
 import AdminDashboard from './components/admin/AdminDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import TournamentSettingsPage from './pages/admin/TournamentSettingsPage';
+import EntriesAdminPage from './pages/admin/EntriesAdminPage';
 import HomePage from './pages/HomePage';
 import DashboardPage from './pages/DashboardPage';
 import SubmitDesignPage from './pages/SubmitDesignPage';
@@ -123,7 +124,7 @@ function App() {
                 path="admin/entries"
                 element={
                   <AdminRoute>
-                    <div>Admin Entries Page</div>
+                    <EntriesAdminPage />
                   </AdminRoute>
                 }
               />
