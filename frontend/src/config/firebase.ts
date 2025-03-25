@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAnalytics } from 'firebase/analytics';
@@ -55,5 +55,11 @@ try {
   throw error;
 }
 
-export { auth, db, storage, analytics };
+// Configure Google Auth Provider
+const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID
+});
+
+export { auth, db, storage, analytics, googleProvider };
 export default app; 

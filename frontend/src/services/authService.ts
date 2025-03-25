@@ -10,7 +10,7 @@ import {
   User as FirebaseUser
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
+import { auth, db, googleProvider } from '../config/firebase';
 import { trackEvent, AnalyticsEvents } from '../utils/analytics';
 
 export interface User {
@@ -124,8 +124,7 @@ export const login = async (email: string, password: string): Promise<User> => {
 // Login with Google
 export const loginWithGoogle = async (): Promise<User> => {
   try {
-    const provider = new GoogleAuthProvider();
-    const userCredential = await signInWithPopup(auth, provider);
+    const userCredential = await signInWithPopup(auth, googleProvider);
     
     // Check if user exists in Firestore
     const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
@@ -153,6 +152,7 @@ export const loginWithGoogle = async (): Promise<User> => {
     trackEvent(AnalyticsEvents.USER_SIGNED_IN, { method: 'google' });
     return userDoc.exists() ? userDoc.data() as User : user;
   } catch (error) {
+    console.error('Google login error:', error);
     trackEvent(AnalyticsEvents.ERROR_OCCURRED, {
       error_message: error.message,
       error_code: error.code
