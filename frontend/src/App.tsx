@@ -10,6 +10,10 @@ import AdminDashboard from './components/admin/AdminDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import TournamentSettingsPage from './pages/admin/TournamentSettingsPage';
 import HomePage from './pages/HomePage';
+import DashboardPage from './pages/DashboardPage';
+import SubmitDesignPage from './pages/SubmitDesignPage';
+import VotePage from './pages/VotePage';
+import WinnersPage from './pages/WinnersPage';
 import { useEffect } from 'react';
 import { handleRedirectResult } from './services/authService';
 
@@ -61,14 +65,14 @@ function App() {
               <Route path="login" element={<LoginForm />} />
               <Route path="register" element={<RegisterForm />} />
               <Route path="reset-password" element={<ResetPasswordForm />} />
-              <Route path="winners" element={<div>Winners Page</div>} />
+              <Route path="winners" element={<WinnersPage />} />
 
               {/* Protected routes */}
               <Route
                 path="submit"
                 element={
                   <PrivateRoute>
-                    <div>Submit Design Page</div>
+                    <SubmitDesignPage />
                   </PrivateRoute>
                 }
               />
@@ -76,7 +80,7 @@ function App() {
                 path="vote"
                 element={
                   <PrivateRoute>
-                    <div>Vote Page</div>
+                    <VotePage />
                   </PrivateRoute>
                 }
               />
@@ -92,7 +96,7 @@ function App() {
                 path="dashboard"
                 element={
                   <PrivateRoute>
-                    <div>Dashboard Page</div>
+                    <DashboardPage />
                   </PrivateRoute>
                 }
               />
