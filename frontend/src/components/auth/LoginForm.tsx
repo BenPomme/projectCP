@@ -16,7 +16,7 @@ export default function LoginForm() {
 
     try {
       await login(email, password);
-      navigate('/projectCP/dashboard');
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Failed to login');
     } finally {
@@ -30,7 +30,7 @@ export default function LoginForm() {
 
     try {
       await loginWithGoogle();
-      navigate('/projectCP/dashboard');
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Failed to login with Google');
     } finally {
@@ -47,7 +47,7 @@ export default function LoginForm() {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Or{' '}
-            <Link to="/projectCP/register" className="font-medium text-primary-600 hover:text-primary-500">
+            <Link to="/register" className="font-medium text-primary-600 hover:text-primary-500">
               create a new account
             </Link>
           </p>
@@ -95,7 +95,7 @@ export default function LoginForm() {
 
           <div className="flex items-center justify-between">
             <div className="text-sm">
-              <Link to="/projectCP/reset-password" className="font-medium text-primary-600 hover:text-primary-500">
+              <Link to="/reset-password" className="font-medium text-primary-600 hover:text-primary-500">
                 Forgot your password?
               </Link>
             </div>
