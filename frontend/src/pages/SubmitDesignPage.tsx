@@ -1,4 +1,4 @@
-import { useState, useRef, FormEvent } from 'react';
+import { useState, useRef, FormEvent, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { db, storage } from '../config/firebase';
 import { collection, addDoc, Timestamp } from 'firebase/firestore';
@@ -7,7 +7,7 @@ import { trackEvent } from '../utils/analytics';
 import { useNavigate } from 'react-router-dom';
 
 export default function SubmitDesignPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -17,8 +17,21 @@ export default function SubmitDesignPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (!authLoading && !user) {
+      console.log('User not authenticated, redirecting to login');
+      navigate('/login');
+    }
+  }, [user, authLoading, navigate]);
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    
+    if (!user) {
+      setError('You must be logged in to submit a design');
+      navigate('/login');
+      return;
+    }
     
     if (!title.trim()) {
       setError('Please enter a title for your design');
@@ -38,41 +51,73 @@ export default function SubmitDesignPage() {
       const storageRef = ref(storage, `designs/${user!.id}/${Date.now()}_${imageFile.name}`);
       const uploadTask = uploadBytesResumable(storageRef, imageFile);
       
+      console.log('Starting file upload to path:', `designs/${user!.id}/${Date.now()}_${imageFile.name}`);
+      
       uploadTask.on(
         'state_changed',
         (snapshot) => {
           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
           setUploadProgress(progress);
+          console.log(`Upload progress: ${progress.toFixed(2)}%`);
         },
         (error) => {
           console.error('Upload error:', error);
-          setError('Failed to upload image. Please try again.');
+          console.error('Error code:', error.code);
+          console.error('Error message:', error.message);
+          
+          let errorMessage = 'Failed to upload image. ';
+          
+          // Add more specific error messages based on Firebase Storage error codes
+          switch(error.code) {
+            case 'storage/unauthorized':
+              errorMessage += 'You do not have permission to upload to this location.';
+              break;
+            case 'storage/canceled':
+              errorMessage += 'Upload was canceled.';
+              break;
+            case 'storage/unknown':
+            default:
+              errorMessage += 'An unknown error occurred. Please try again.';
+              break;
+          }
+          
+          setError(errorMessage);
           setLoading(false);
         },
         async () => {
           // Get download URL
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          
-          // Add entry to Firestore
-          const entriesRef = collection(db, 'entries');
-          await addDoc(entriesRef, {
-            title,
-            description: description.trim() || null,
-            imageUrl: downloadURL,
-            userId: user!.id,
-            userDisplayName: user!.displayName || user!.email,
-            userPhotoURL: user!.photoURL || null,
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now(),
-            voteCount: 0,
-            averageRating: 0,
-            status: 'pending' // pending, approved, rejected
-          });
-          
-          trackEvent('design_submitted', { title });
-          
-          // Redirect to dashboard
-          navigate('/dashboard');
+          try {
+            console.log('Upload completed, getting download URL');
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            console.log('Download URL received:', downloadURL);
+            
+            // Add entry to Firestore
+            console.log('Creating Firestore entry');
+            const entriesRef = collection(db, 'entries');
+            await addDoc(entriesRef, {
+              title,
+              description: description.trim() || null,
+              imageUrl: downloadURL,
+              userId: user!.id,
+              userDisplayName: user!.displayName || user!.email,
+              userPhotoURL: user!.photoURL || null,
+              createdAt: Timestamp.now(),
+              updatedAt: Timestamp.now(),
+              voteCount: 0,
+              averageRating: 0,
+              status: 'pending' // pending, approved, rejected
+            });
+            
+            console.log('Design submitted successfully');
+            trackEvent('design_submitted', { title });
+            
+            // Redirect to dashboard
+            navigate('/dashboard');
+          } catch (err: any) {
+            console.error('Error in final upload stage:', err);
+            setError(err.message || 'Failed to complete submission. Please try again.');
+            setLoading(false);
+          }
         }
       );
     } catch (err: any) {
