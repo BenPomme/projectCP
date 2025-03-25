@@ -27,15 +27,22 @@ export default function VotePage() {
   const [votedEntries, setVotedEntries] = useState<string[]>([]);
 
   useEffect(() => {
-    fetchRandomEntry();
-    fetchVotedEntries();
-  }, []);
+    if (user) {
+      fetchRandomEntry();
+      fetchVotedEntries();
+    } else {
+      setLoading(false);
+      setError('Please log in to vote on designs.');
+    }
+  }, [user]);
 
   const fetchVotedEntries = async () => {
+    if (!user) return;
+    
     try {
       const votesQuery = query(
         collection(db, 'votes'),
-        where('userId', '==', user!.id)
+        where('userId', '==', user.id)
       );
       const votesSnapshot = await getDocs(votesQuery);
       const votedEntryIds = votesSnapshot.docs.map(doc => doc.data().entryId);
@@ -47,6 +54,8 @@ export default function VotePage() {
   };
 
   const fetchRandomEntry = async () => {
+    if (!user) return;
+    
     try {
       setLoading(true);
       setError(null);
@@ -54,7 +63,7 @@ export default function VotePage() {
       // Get all entries except user's own and already voted ones
       const entriesQuery = query(
         collection(db, 'entries'),
-        where('userId', '!=', user!.id),
+        where('userId', '!=', user.id),
         where('status', '==', 'approved'),
         orderBy('userId'), // Required for compound query
         limit(20)
@@ -89,7 +98,7 @@ export default function VotePage() {
   };
 
   const handleVote = async (rating: number) => {
-    if (!currentEntry || voting || remainingVotes <= 0) return;
+    if (!currentEntry || voting || remainingVotes <= 0 || !user) return;
     
     try {
       setVoting(true);
@@ -98,7 +107,7 @@ export default function VotePage() {
       // Add vote to Firestore
       await addDoc(collection(db, 'votes'), {
         entryId: currentEntry.id,
-        userId: user!.id,
+        userId: user.id,
         rating,
         createdAt: Timestamp.now()
       });
