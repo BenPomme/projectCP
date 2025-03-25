@@ -20,6 +20,11 @@ king-competition/
 - Admin dashboard with statistics
 - Secure API endpoints
 - Responsive design
+- User authentication with email/password and Google
+- Design submission system
+- Voting mechanism
+- Tournament phases (submission, voting, completed)
+- Admin controls for managing tournaments and submissions
 
 ## Tech Stack
 
@@ -37,13 +42,14 @@ king-competition/
 - Node.js (v18 or higher)
 - PostgreSQL
 - Docker (optional)
+- npm
 
 ### Installation
 
 1. Clone the repository:
 ```bash
-git clone [repository-url]
-cd king-competition
+git clone https://github.com/BenPomme/projectCP.git
+cd projectCP
 ```
 
 2. Install dependencies:
@@ -105,6 +111,25 @@ npm test
 2. Commit your changes
 3. Push to the branch
 4. Create a Pull Request
+
+## Deployment
+
+The application is automatically deployed to GitHub Pages when changes are pushed to the main branch.
+
+You can also deploy manually using the included script:
+```
+./scripts/deploy.sh
+```
+
+## Tournament Management
+
+The application supports multiple tournament phases:
+
+1. **Submission Phase** - Users can submit their designs
+2. **Voting Phase** - Users can vote on submitted designs
+3. **Completed Phase** - The tournament is finished, winners are displayed
+
+Admins can manage tournament phases and timers through the admin interface at `/admin/settings`.
 
 ## License
 
