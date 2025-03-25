@@ -33,22 +33,29 @@ export default function ProfilePage() {
           ...doc.data()
         })) as Entry[];
 
-        // Fetch votes for user's entries
-        const votesQuery = query(
-          collection(db, 'votes'),
-          where('entryId', 'in', entries.map(entry => entry.id))
-        );
-        const votesSnapshot = await getDocs(votesQuery);
-        const votes = votesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Vote[];
+        // Initialize stats with entries data
+        let totalVotes = 0;
+        let averageRating = 0;
+        let votes: Vote[] = [];
 
-        // Calculate statistics
-        const totalVotes = votes.length;
-        const averageRating = totalVotes > 0
-          ? votes.reduce((acc, vote) => acc + (vote.rating || 0), 0) / totalVotes
-          : 0;
+        // Only fetch votes if the user has entries
+        if (entries.length > 0) {
+          const votesQuery = query(
+            collection(db, 'votes'),
+            where('entryId', 'in', entries.map(entry => entry.id))
+          );
+          const votesSnapshot = await getDocs(votesQuery);
+          votes = votesSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as Vote[];
+
+          // Calculate statistics
+          totalVotes = votes.length;
+          averageRating = totalVotes > 0
+            ? votes.reduce((acc, vote) => acc + (vote.rating || 0), 0) / totalVotes
+            : 0;
+        }
 
         setStats({
           totalEntries: entries.length,
