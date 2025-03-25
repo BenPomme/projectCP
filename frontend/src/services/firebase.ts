@@ -56,6 +56,15 @@ export interface Vote {
   createdAt: Timestamp;
 }
 
+export interface TournamentState {
+  id: string;
+  currentPhase: 'submission' | 'voting' | 'completed';
+  submissionPhaseEnd: Date;
+  votingPhaseEnd: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Auth functions
 export const register = async (email: string, password: string): Promise<User> => {
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -175,4 +184,44 @@ export const uploadImage = async (file: File, path: string): Promise<string> => 
 export const deleteImage = async (path: string): Promise<void> => {
   const storageRef = ref(storage, path);
   await deleteObject(storageRef);
+};
+
+// Tournament state functions
+export const getTournamentState = async (): Promise<TournamentState | null> => {
+  const docRef = doc(db, 'tournament', 'current');
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) {
+    return null;
+  }
+  return {
+    id: docSnap.id,
+    ...docSnap.data(),
+    submissionPhaseEnd: docSnap.data().submissionPhaseEnd.toDate(),
+    votingPhaseEnd: docSnap.data().votingPhaseEnd.toDate(),
+    createdAt: docSnap.data().createdAt.toDate(),
+    updatedAt: docSnap.data().updatedAt.toDate()
+  } as TournamentState;
+};
+
+export const updateTournamentState = async (state: Partial<TournamentState>): Promise<void> => {
+  const docRef = doc(db, 'tournament', 'current');
+  await setDoc(docRef, {
+    ...state,
+    updatedAt: new Date()
+  }, { merge: true });
+};
+
+export const initializeTournamentState = async (): Promise<void> => {
+  const docRef = doc(db, 'tournament', 'current');
+  const now = new Date();
+  const submissionEnd = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000); // 2 days from now
+  const votingEnd = new Date(submissionEnd.getTime() + 2 * 24 * 60 * 60 * 1000); // 2 days after submission ends
+
+  await setDoc(docRef, {
+    currentPhase: 'submission',
+    submissionPhaseEnd: submissionEnd,
+    votingPhaseEnd: votingEnd,
+    createdAt: now,
+    updatedAt: now
+  });
 }; 

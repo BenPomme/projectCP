@@ -8,6 +8,7 @@ import ResetPasswordForm from './components/auth/ResetPasswordForm';
 import ProfilePage from './pages/ProfilePage';
 import AdminDashboard from './components/admin/AdminDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
+import TournamentSettingsPage from './pages/admin/TournamentSettingsPage';
 
 // Create a client
 const queryClient = new QueryClient();
