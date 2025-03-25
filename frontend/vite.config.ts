@@ -12,15 +12,20 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor': ['react', 'react-dom', 'react-router-dom'],
-          'firebase': ['firebase'],
           'ui': ['@headlessui/react', '@heroicons/react']
         }
       }
     },
-    chunkSizeWarningLimit: 1000
+    chunkSizeWarningLimit: 1000,
+    commonjsOptions: {
+      include: [/node_modules/]
+    }
   },
   server: {
     port: 3000,
     open: true
+  },
+  optimizeDeps: {
+    include: ['firebase']
   }
 })
