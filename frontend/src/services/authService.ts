@@ -289,7 +289,8 @@ export const handleRedirectResult = async () => {
       trackEvent(AnalyticsEvents.USER_SIGNED_IN, { method: 'google' });
       
       // Navigate to dashboard after successful login
-      window.location.href = '/projectCP/dashboard';
+      // Use the correct path without projectCP prefix since that's handled by the router basename
+      window.location.href = '/dashboard';
       
       return userData;
     }

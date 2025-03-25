@@ -24,6 +24,13 @@ const queryClient = new QueryClient();
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   
+  useEffect(() => {
+    // If the user is not authenticated after loading is done, redirect to login
+    if (!loading && !user) {
+      console.log('User not authenticated in PrivateRoute, redirecting to login');
+    }
+  }, [user, loading]);
+  
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
