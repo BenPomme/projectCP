@@ -5,22 +5,29 @@ import { getStorage } from 'firebase/storage';
 import { getAnalytics } from 'firebase/analytics';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBqeebps7CNCQw_xis2DKiGHMRYmurj_B4",
-  authDomain: "kingcp-a0065.firebaseapp.com",
-  projectId: "kingcp-a0065",
-  storageBucket: "kingcp-a0065.firebasestorage.app",
-  messagingSenderId: "550768863932",
-  appId: "1:550768863932:web:acabd2d2584b8165a7beb9",
-  measurementId: "G-QRVT5F6VGR"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase services
+// Initialize services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-export const analytics = getAnalytics(app);
+
+// Initialize Analytics only in production
+let analytics = null;
+if (import.meta.env.PROD) {
+  analytics = getAnalytics(app);
+}
+
+export { analytics };
 
 export default app; 
