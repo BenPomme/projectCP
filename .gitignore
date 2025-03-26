@@ -23,3 +23,7 @@ out/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Firebase service account keys
+*-firebase-adminsdk-*.json
+kingcp-a0065-firebase-adminsdk-fbsvc-f9a6f9f073.json

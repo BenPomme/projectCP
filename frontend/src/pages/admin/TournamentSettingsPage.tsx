@@ -133,24 +133,21 @@ export default function TournamentSettingsPage() {
     }
   };
 
-  const handleTimeUpdate = async (phase: 'submission' | 'voting', days: number) => {
+  const handleDateUpdate = async (phase: 'submission' | 'voting', field: 'Start' | 'End', date: Date) => {
     try {
       setError(null);
       setSuccess(null);
 
-      const now = new Date();
-      const endDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-
       const update: Partial<TournamentState> = {};
-      update[`${phase}PhaseEnd`] = endDate;
+      update[`${phase}Phase${field}`] = date;
 
       await updateTournamentState(update);
 
-      setSuccess(`${phase} phase end time updated to ${days} days from now`);
+      setSuccess(`${phase} phase ${field.toLowerCase()} time updated`);
       await fetchTournamentState();
     } catch (err: any) {
-      console.error(`Error updating ${phase} phase time:`, err);
-      setError(err.message || `Failed to update ${phase} phase time`);
+      console.error(`Error updating ${phase} phase ${field.toLowerCase()} time:`, err);
+      setError(err.message || `Failed to update ${phase} phase ${field.toLowerCase()} time`);
     }
   };
 
@@ -222,75 +219,55 @@ export default function TournamentSettingsPage() {
           </div>
 
           <div>
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Phase Timers</h2>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Phase Timing</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Submission Phase Timing */}
               <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="text-md font-medium text-gray-700">Submission Phase End</h3>
-                <p className="mt-2 text-lg text-gray-900">
-                  {tournamentState?.submissionPhaseEnd
-                    ? format(tournamentState.submissionPhaseEnd, 'PPP p')
-                    : 'Not set'}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    onClick={() => handleTimeUpdate('submission', 1)}
-                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                  >
-                    1 Day
-                  </button>
-                  <button
-                    onClick={() => handleTimeUpdate('submission', 3)}
-                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                  >
-                    3 Days
-                  </button>
-                  <button
-                    onClick={() => handleTimeUpdate('submission', 7)}
-                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                  >
-                    1 Week
-                  </button>
-                  <button
-                    onClick={() => handleTimeUpdate('submission', 14)}
-                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                  >
-                    2 Weeks
-                  </button>
+                <h3 className="text-md font-medium text-gray-700 mb-4">Submission Phase</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Start Time</label>
+                    <input
+                      type="datetime-local"
+                      value={tournamentState?.submissionPhaseStart ? format(tournamentState.submissionPhaseStart, "yyyy-MM-dd'T'HH:mm") : ''}
+                      onChange={(e) => handleDateUpdate('submission', 'Start', new Date(e.target.value))}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">End Time</label>
+                    <input
+                      type="datetime-local"
+                      value={tournamentState?.submissionPhaseEnd ? format(tournamentState.submissionPhaseEnd, "yyyy-MM-dd'T'HH:mm") : ''}
+                      onChange={(e) => handleDateUpdate('submission', 'End', new Date(e.target.value))}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
                 </div>
               </div>
 
+              {/* Voting Phase Timing */}
               <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="text-md font-medium text-gray-700">Voting Phase End</h3>
-                <p className="mt-2 text-lg text-gray-900">
-                  {tournamentState?.votingPhaseEnd
-                    ? format(tournamentState.votingPhaseEnd, 'PPP p')
-                    : 'Not set'}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    onClick={() => handleTimeUpdate('voting', 1)}
-                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                  >
-                    1 Day
-                  </button>
-                  <button
-                    onClick={() => handleTimeUpdate('voting', 3)}
-                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                  >
-                    3 Days
-                  </button>
-                  <button
-                    onClick={() => handleTimeUpdate('voting', 7)}
-                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                  >
-                    1 Week
-                  </button>
-                  <button
-                    onClick={() => handleTimeUpdate('voting', 14)}
-                    className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                  >
-                    2 Weeks
-                  </button>
+                <h3 className="text-md font-medium text-gray-700 mb-4">Voting Phase</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Start Time</label>
+                    <input
+                      type="datetime-local"
+                      value={tournamentState?.votingPhaseStart ? format(tournamentState.votingPhaseStart, "yyyy-MM-dd'T'HH:mm") : ''}
+                      onChange={(e) => handleDateUpdate('voting', 'Start', new Date(e.target.value))}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">End Time</label>
+                    <input
+                      type="datetime-local"
+                      value={tournamentState?.votingPhaseEnd ? format(tournamentState.votingPhaseEnd, "yyyy-MM-dd'T'HH:mm") : ''}
+                      onChange={(e) => handleDateUpdate('voting', 'End', new Date(e.target.value))}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

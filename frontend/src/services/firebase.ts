@@ -59,7 +59,9 @@ export interface Vote {
 export interface TournamentState {
   id: string;
   currentPhase: 'submission' | 'voting' | 'completed';
+  submissionPhaseStart: Date;
   submissionPhaseEnd: Date;
+  votingPhaseStart: Date;
   votingPhaseEnd: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -196,7 +198,9 @@ export const getTournamentState = async (): Promise<TournamentState | null> => {
   return {
     id: docSnap.id,
     ...docSnap.data(),
+    submissionPhaseStart: docSnap.data().submissionPhaseStart.toDate(),
     submissionPhaseEnd: docSnap.data().submissionPhaseEnd.toDate(),
+    votingPhaseStart: docSnap.data().votingPhaseStart.toDate(),
     votingPhaseEnd: docSnap.data().votingPhaseEnd.toDate(),
     createdAt: docSnap.data().createdAt.toDate(),
     updatedAt: docSnap.data().updatedAt.toDate()
@@ -219,14 +223,17 @@ export const updateTournamentState = async (state: Partial<TournamentState>): Pr
 
 export const initializeTournamentState = async (): Promise<void> => {
   // Set default tournament state with current phase as submission
-  // Set submission phase to end in 7 days, voting phase to end in 14 days
   const now = new Date();
+  const submissionStart = now;
   const submissionEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const votingEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const votingStart = submissionEnd;
+  const votingEnd = new Date(votingStart.getTime() + 7 * 24 * 60 * 60 * 1000);
   
   await setDoc(doc(db, 'tournament', 'current'), {
     currentPhase: 'submission',
+    submissionPhaseStart: Timestamp.fromDate(submissionStart),
     submissionPhaseEnd: Timestamp.fromDate(submissionEnd),
+    votingPhaseStart: Timestamp.fromDate(votingStart),
     votingPhaseEnd: Timestamp.fromDate(votingEnd),
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now()
