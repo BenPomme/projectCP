@@ -128,7 +128,10 @@ export const getEntry = async (id: string): Promise<Entry | null> => {
 export const getEntries = async (): Promise<Entry[]> => {
   const entriesQuery = query(collection(db, 'entries'), orderBy('createdAt', 'desc'));
   const querySnapshot = await getDocs(entriesQuery);
-  return querySnapshot.docs.map(doc => doc.data() as Entry);
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }) as Entry);
 };
 
 export const updateEntry = async (id: string, data: Partial<Entry>) => {
@@ -187,6 +190,42 @@ export const getUserVotes = async (userId: string): Promise<Vote[]> => {
   })) as Vote[];
 };
 
+export const getVotes = async (userId: string): Promise<Record<string, number>> => {
+  try {
+    const userVotes = await getUserVotes(userId);
+    const votesMap: Record<string, number> = {};
+    
+    userVotes.forEach(vote => {
+      votesMap[vote.entryId] = vote.rating;
+    });
+    
+    return votesMap;
+  } catch (error) {
+    console.error('Error getting user votes:', error);
+    return {};
+  }
+};
+
+export const submitVote = async (entryId: string, rating: number): Promise<void> => {
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error('You must be logged in to vote');
+    }
+
+    // Create the vote
+    await createVote({
+      userId: user.uid,
+      entryId,
+      rating
+    });
+    
+  } catch (error) {
+    console.error('Error submitting vote:', error);
+    throw error;
+  }
+};
+
 // Storage functions
 export const uploadImage = async (file: File, path: string): Promise<string> => {
   const storageRef = ref(storage, path);
@@ -197,6 +236,40 @@ export const uploadImage = async (file: File, path: string): Promise<string> => 
 export const deleteImage = async (path: string): Promise<void> => {
   const storageRef = ref(storage, path);
   await deleteObject(storageRef);
+};
+
+// Entry submission helper
+export const submitEntry = async ({ title, description, image, userId }: { 
+  title: string; 
+  description: string; 
+  image: File;
+  userId: string;
+}): Promise<Entry> => {
+  try {
+    // Get user
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    const userData = userDoc.data();
+    
+    // Upload image
+    const imagePath = `entries/${userId}/${Date.now()}_${image.name}`;
+    const imageUrl = await uploadImage(image, imagePath);
+    
+    // Create entry with user display name
+    const entry = await createEntry({
+      userId,
+      title,
+      description,
+      imageUrl,
+      userDisplayName: userData?.displayName || 'Anonymous',
+      userPhotoURL: userData?.photoURL || null,
+      status: 'approved'  // Auto-approve for now
+    });
+    
+    return entry;
+  } catch (error) {
+    console.error('Error submitting entry:', error);
+    throw error;
+  }
 };
 
 // Tournament state functions

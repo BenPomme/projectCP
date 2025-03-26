@@ -11,34 +11,35 @@ export default function VotingPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [state, entriesData, votesData] = await Promise.all([
-          getTournamentState(),
-          getEntries(),
-          getVotes(user?.id || '')
-        ]);
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [state, entriesData, votesData] = await Promise.all([
+        getTournamentState(),
+        getEntries(),
+        getVotes(user?.id || '')
+      ]);
 
-        setTournamentState(state);
-        setEntries(entriesData);
-        setUserVotes(votesData);
+      setTournamentState(state);
+      setEntries(entriesData);
+      setUserVotes(votesData);
 
-        // Check if user has reached vote limit
-        if (state?.maxVotesPerUser !== null) {
-          const voteCount = Object.keys(votesData).length;
-          if (voteCount >= state.maxVotesPerUser) {
-            setError(`You have reached the maximum number of votes (${state.maxVotesPerUser})`);
-          }
+      // Check if user has reached vote limit
+      if (state?.maxVotesPerUser !== null) {
+        const voteCount = Object.keys(votesData).length;
+        if (voteCount >= state.maxVotesPerUser) {
+          setError(`You have reached the maximum number of votes (${state.maxVotesPerUser})`);
         }
-      } catch (err) {
-        setError('Failed to load voting data');
-        console.error('Error fetching data:', err);
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (err) {
+      setError('Failed to load voting data');
+      console.error('Error fetching data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  React.useEffect(() => {
     fetchData();
   }, [user?.id]);
 
@@ -60,7 +61,13 @@ export default function VotingPage() {
       }
 
       await submitVote(entryId, rating);
+      
+      // Update local state temporarily
       setUserVotes(prev => ({ ...prev, [entryId]: rating }));
+      
+      // Refresh the data to get updated vote counts
+      await fetchData();
+      
       setError(null);
     } catch (err) {
       setError('Failed to submit vote');
@@ -116,6 +123,18 @@ export default function VotingPage() {
             
             <h3 className="text-lg font-semibold mb-2">{entry.title}</h3>
             <p className="text-gray-600 mb-4">{entry.description}</p>
+            
+            {/* Display vote count and average rating */}
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center">
+                <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+                <span className="ml-1 text-sm font-medium text-gray-800">
+                  {entry.averageRating ? entry.averageRating.toFixed(1) : '0.0'} ({entry.voteCount || 0} votes)
+                </span>
+              </div>
+            </div>
             
             <VotingScale
               entryId={entry.id}

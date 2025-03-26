@@ -30,12 +30,14 @@ export default function VotingScale({ entryId, onVote, currentRating }: VotingSc
   }, []);
 
   if (loading) {
-    return <div className="animate-pulse">Loading...</div>;
+    return <div className="animate-pulse">Loading voting options...</div>;
   }
 
   if (error) {
     return <div className="text-red-500">{error}</div>;
   }
+
+  const isDisabled = currentRating !== undefined;
 
   return (
     <div className="space-y-4">
@@ -47,17 +49,25 @@ export default function VotingScale({ entryId, onVote, currentRating }: VotingSc
         {[1, 2, 3, 4, 5].map((rating) => (
           <button
             key={rating}
-            onClick={() => onVote(rating)}
-            className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-semibold
+            onClick={() => !isDisabled && onVote(rating)}
+            disabled={isDisabled}
+            className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-semibold transition-colors
               ${currentRating === rating
                 ? 'bg-indigo-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                : isDisabled
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
+            title={isDisabled ? "You've already voted for this entry" : `Rate this entry ${rating}/5`}
           >
             {rating}
           </button>
         ))}
       </div>
+      
+      {isDisabled && (
+        <p className="text-sm text-gray-500">You've already rated this entry</p>
+      )}
     </div>
   );
 } 
