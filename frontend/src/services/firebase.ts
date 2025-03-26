@@ -134,16 +134,26 @@ export const getEntry = async (id: string): Promise<Entry | null> => {
 export const getEntriesForTournament = async (tournamentId: string): Promise<Entry[]> => {
   try {
     console.log(`Fetching entries for tournament ${tournamentId}...`);
+    
+    // Simple query with only a single filter - doesn't require a composite index
     const entriesQuery = query(
       collection(db, 'entries'),
-      where('tournamentId', '==', tournamentId),
-      orderBy('createdAt', 'desc')
+      where('tournamentId', '==', tournamentId)
     );
+    
     const querySnapshot = await getDocs(entriesQuery);
     const entries = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }) as Entry);
+    
+    // Sort by createdAt descending on the client side
+    entries.sort((a, b) => {
+      const dateA = a.createdAt instanceof Date ? a.createdAt : a.createdAt.toDate();
+      const dateB = b.createdAt instanceof Date ? b.createdAt : b.createdAt.toDate();
+      return dateB.getTime() - dateA.getTime();
+    });
+    
     console.log(`Found ${entries.length} entries for tournament ${tournamentId}`);
     return entries;
   } catch (error) {
@@ -354,6 +364,7 @@ export const getVotes = async (userId: string): Promise<Record<string, number>> 
 export const getTournamentVotes = async (tournamentId: string): Promise<Vote[]> => {
   try {
     console.log(`Fetching votes for tournament ${tournamentId}...`);
+    // Simple query with only a single filter - doesn't require a composite index
     const votesQuery = query(
       collection(db, 'votes'),
       where('tournamentId', '==', tournamentId)
