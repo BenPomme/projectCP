@@ -72,8 +72,14 @@ export default function TournamentSettingsPage() {
         return;
       }
       
+      console.log('Current user:', user);
+      console.log('Tournament ownerId:', tournamentData.ownerId);
+      console.log('User ID matches owner?', tournamentData.ownerId === user?.id);
+      console.log('User is admin?', user?.isAdmin);
+      
       // Check if user is allowed to edit this tournament
-      if (!user?.isAdmin && tournamentData.ownerId !== user?.id) {
+      if (user?.isAdmin === false && tournamentData.ownerId !== user?.id) {
+        console.error('Permission denied - user is not admin and not the owner');
         setError('You do not have permission to edit this tournament');
         return;
       }

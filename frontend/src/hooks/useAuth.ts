@@ -14,19 +14,25 @@ export function useAuth() {
     const unsubscribe = onAuthStateChange(async (firebaseUser: FirebaseUser | null) => {
       try {
         if (firebaseUser) {
+          console.log('Firebase user authenticated:', firebaseUser.uid);
           // Get user document from Firestore
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           
           if (userDoc.exists()) {
             const userData = userDoc.data() as User;
+            console.log('User data from Firestore:', userData);
+            console.log('isAdmin status:', userData.isAdmin);
             setUser(userData);
           } else {
+            console.log('User document not found in Firestore');
             setUser(null);
           }
         } else {
+          console.log('No Firebase user authenticated');
           setUser(null);
         }
       } catch (err) {
+        console.error('Error in auth state change:', err);
         setError(err as Error);
       } finally {
         setLoading(false);
@@ -36,11 +42,15 @@ export function useAuth() {
     return () => unsubscribe();
   }, []);
 
-  return {
+  const authData = {
     user,
     loading,
     error,
     isAuthenticated: !!user,
     isAdmin: user?.isAdmin || false
   };
+  
+  console.log('useAuth hook returning:', authData);
+  
+  return authData;
 } 
