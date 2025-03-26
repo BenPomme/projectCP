@@ -30,7 +30,7 @@ export default function VotingPage() {
         setUserVotes(votesData);
 
         // Check if user has reached vote limit
-        if (state?.maxVotesPerUser !== null) {
+        if (state?.maxVotesPerUser !== null && state?.maxVotesPerUser !== undefined) {
           const voteCount = Object.keys(votesData).length;
           if (voteCount >= state.maxVotesPerUser) {
             setError(`You have reached the maximum number of votes (${state.maxVotesPerUser})`);
@@ -63,7 +63,7 @@ export default function VotingPage() {
       }
 
       // Check if user has reached vote limit
-      if (tournamentState?.maxVotesPerUser !== null) {
+      if (tournamentState?.maxVotesPerUser !== null && tournamentState?.maxVotesPerUser !== undefined) {
         const voteCount = Object.keys(userVotes).length;
         if (voteCount >= tournamentState.maxVotesPerUser) {
           setError(`You have reached the maximum number of votes (${tournamentState.maxVotesPerUser})`);
@@ -116,7 +116,7 @@ export default function VotingPage() {
           <div>
             <p className="text-gray-600">Vote Limit:</p>
             <p className="text-2xl font-bold text-primary-600">
-              {tournamentState?.maxVotesPerUser === null ? 'Unlimited' : tournamentState.maxVotesPerUser}
+              {tournamentState?.maxVotesPerUser === null || tournamentState?.maxVotesPerUser === undefined ? 'Unlimited' : tournamentState.maxVotesPerUser}
             </p>
           </div>
         </div>

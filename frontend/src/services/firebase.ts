@@ -153,51 +153,51 @@ export const deleteEntry = async (id: string) => {
 
 // Vote functions
 export const createVote = async (vote: Omit<Vote, 'id' | 'createdAt'>) => {
+  console.log('Creating vote with data:', vote);
+  
   const newVote = {
     ...vote,
     createdAt: Timestamp.now()
   };
   
-  const docRef = await addDoc(collection(db, 'votes'), newVote);
-  
-  // Get all votes for this entry including this new one
+  // Get entry to update
   const entryRef = doc(db, 'entries', vote.entryId);
   const entrySnap = await getDoc(entryRef);
   
   if (!entrySnap.exists()) {
-    console.error('Entry does not exist');
+    console.error('Entry not found:', vote.entryId);
     throw new Error('Entry does not exist');
   }
   
-  const entry = entrySnap.data();
+  const entryData = entrySnap.data();
+  console.log('Entry before update:', entryData);
   
-  // Calculate new vote count and average
-  const newVoteCount = (entry.voteCount || 0) + 1;
+  // Calculate new rating
+  const currentVoteCount = entryData.voteCount || 0;
+  const currentTotalPoints = (entryData.averageRating || 0) * currentVoteCount;
+  const newVoteCount = currentVoteCount + 1;
+  const newTotalPoints = currentTotalPoints + vote.rating;
+  const newAverageRating = newTotalPoints / newVoteCount;
   
-  // If this is the first vote, the average is just the rating
-  // Otherwise calculate weighted average based on previous average and votes
-  let newAverageRating;
-  if (entry.voteCount === 0 || entry.voteCount === undefined) {
-    newAverageRating = vote.rating;
-  } else {
-    // Calculate total points from previous votes
-    const previousTotalPoints = entry.averageRating * entry.voteCount;
-    // Add new vote points
-    const newTotalPoints = previousTotalPoints + vote.rating;
-    // Calculate new average
-    newAverageRating = newTotalPoints / newVoteCount;
-  }
-  
-  console.log(`Updating entry ${vote.entryId}:`, {
-    voteCount: newVoteCount,
-    averageRating: newAverageRating
+  console.log('Vote calculation:', {
+    currentVoteCount,
+    currentTotalPoints,
+    newVoteCount,
+    newTotalPoints,
+    newAverageRating,
+    newRating: vote.rating
   });
+
+  // First add the vote
+  const docRef = await addDoc(collection(db, 'votes'), newVote);
   
-  // Update entry vote count and average rating
+  // Then update the entry with new vote count and average
   await updateDoc(entryRef, {
     voteCount: newVoteCount,
     averageRating: newAverageRating
   });
+  
+  console.log('Entry updated with new vote stats');
   
   return { id: docRef.id, ...newVote };
 };
@@ -383,6 +383,8 @@ export const updateTournamentState = async (state: Partial<TournamentState>): Pr
 };
 
 export const initializeTournamentState = async (): Promise<void> => {
+  console.log('Initializing tournament state');
+  
   // Set default tournament state with current phase as submission
   const now = new Date();
   const submissionStart = now;
@@ -390,7 +392,7 @@ export const initializeTournamentState = async (): Promise<void> => {
   const votingStart = submissionEnd;
   const votingEnd = new Date(votingStart.getTime() + 7 * 24 * 60 * 60 * 1000);
   
-  await setDoc(doc(db, 'tournament', 'current'), {
+  const defaultTournamentState = {
     currentPhase: 'submission',
     submissionPhaseStart: Timestamp.fromDate(submissionStart),
     submissionPhaseEnd: Timestamp.fromDate(submissionEnd),
@@ -402,5 +404,10 @@ export const initializeTournamentState = async (): Promise<void> => {
     maxEntriesPerUser: null, // Unlimited by default
     maxVotesPerUser: null, // Unlimited by default
     votingQuestion: "How would you rate this entry?" // Default voting question
-  });
+  };
+  
+  console.log('Default tournament state:', defaultTournamentState);
+  
+  await setDoc(doc(db, 'tournament', 'current'), defaultTournamentState);
+  console.log('Tournament state initialized successfully');
 }; 
