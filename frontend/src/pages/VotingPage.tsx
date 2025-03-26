@@ -5,7 +5,8 @@ import {
   getTournamentById, 
   getEntriesForTournament, 
   submitVote, 
-  getUserVotesForTournament 
+  getUserVotesForTournament,
+  getTournamentState
 } from '../services/firebase';
 import VotingScale from '../components/VotingScale';
 
@@ -19,18 +20,38 @@ export default function VotingPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Get the actual tournament ID or use 'current' for backward compatibility
+  // Get the actual tournament ID or handle 'current' specially
   const effectiveTournamentId = tournamentId || 'current';
 
   const fetchData = async () => {
     try {
       setLoading(true);
+      setError(null);
       console.log(`Fetching tournament state and entries for tournament ${effectiveTournamentId}...`);
       
-      // Get tournament
-      const tournamentData = await getTournamentById(effectiveTournamentId);
+      // Handle 'current' by fetching the active tournament
+      let actualTournamentId = effectiveTournamentId;
+      let tournamentData;
+      
+      if (effectiveTournamentId === 'current') {
+        console.log('Fetching active tournament...');
+        tournamentData = await getTournamentState();
+        
+        if (!tournamentData) {
+          setError('No active tournament found. Please select a specific tournament.');
+          setLoading(false);
+          return;
+        }
+        
+        actualTournamentId = tournamentData.id;
+        console.log(`Found active tournament: ${tournamentData.name} (ID: ${actualTournamentId})`);
+      } else {
+        // Fetch specific tournament data
+        tournamentData = await getTournamentById(effectiveTournamentId);
+      }
+      
       if (!tournamentData) {
-        setError('Tournament not found');
+        setError(`Tournament not found. Please go back to the home page and select an active tournament.`);
         setLoading(false);
         return;
       }
@@ -41,20 +62,20 @@ export default function VotingPage() {
       
       // Check if tournament is in voting phase
       if (tournamentData.currentPhase !== 'voting') {
-        setError('This tournament is not currently in the voting phase');
+        setError(`This tournament is currently in the ${tournamentData.currentPhase} phase and is not accepting votes.`);
         setLoading(false);
         return;
       }
       
       // Get entries
-      const entriesData = await getEntriesForTournament(effectiveTournamentId);
-      console.log("Entries:", entriesData);
+      const entriesData = await getEntriesForTournament(actualTournamentId);
+      console.log(`Found ${entriesData.length} entries for tournament ${actualTournamentId}`);
       setEntries(entriesData);
       
       if (user?.id) {
         // Get user votes
-        const votesData = await getUserVotesForTournament(user.id, effectiveTournamentId);
-        console.log("User votes:", votesData);
+        const votesData = await getUserVotesForTournament(user.id, actualTournamentId);
+        console.log(`Found ${Object.keys(votesData).length} votes for user ${user.id} in tournament ${actualTournamentId}`);
         setUserVotes(votesData);
 
         // Check if user has reached vote limit
@@ -83,6 +104,11 @@ export default function VotingPage() {
       return;
     }
     
+    if (!tournament) {
+      setError('Tournament data not available');
+      return;
+    }
+    
     try {
       // Check if user has already voted for this entry
       if (userVotes[entryId]) {
@@ -99,11 +125,11 @@ export default function VotingPage() {
         }
       }
 
-      console.log(`Submitting vote: Entry ID ${entryId}, Rating ${rating}, Tournament ID ${effectiveTournamentId}`);
+      console.log(`Submitting vote: Entry ID ${entryId}, Rating ${rating}, Tournament ID ${tournament.id}`);
       setLoading(true);
       
       try {
-        await submitVote(entryId, rating, effectiveTournamentId);
+        await submitVote(entryId, rating, tournament.id);
         console.log('Vote submitted successfully');
         
         // Update local state temporarily
@@ -131,22 +157,24 @@ export default function VotingPage() {
   };
 
   if (loading) {
-    return <div className="animate-pulse p-8 text-center">Loading entries and votes...</div>;
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
   }
 
-  if (error) {
+  if (error || !tournament) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-red-50 border border-red-200 rounded-md p-4">
-          <p className="text-red-700">{error}</p>
-          {error === 'Tournament not found' && (
-            <button 
-              className="mt-4 text-primary-600 hover:text-primary-700"
-              onClick={() => navigate('/')}
-            >
-              Return to Home
-            </button>
-          )}
+          <p className="text-red-700">{error || "Tournament data not available"}</p>
+          <button 
+            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+            onClick={() => navigate('/')}
+          >
+            Return to Home
+          </button>
         </div>
       </div>
     );

@@ -1,7 +1,7 @@
 import { useState, useRef, FormEvent, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useParams, useNavigate } from 'react-router-dom';
-import { submitEntry, getTournamentById, getUserEntriesForTournament } from '../services/firebase';
+import { submitEntry, getTournamentById, getUserEntriesForTournament, getTournamentState } from '../services/firebase';
 import { trackEvent } from '../utils/analytics';
 
 export default function SubmitDesignPage() {
@@ -19,7 +19,7 @@ export default function SubmitDesignPage() {
   const [loadingData, setLoadingData] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Get the actual tournament ID or use 'current' for backward compatibility
+  // Get the actual tournament ID or handle 'current' specially
   const effectiveTournamentId = tournamentId || 'current';
 
   useEffect(() => {
@@ -32,18 +32,38 @@ export default function SubmitDesignPage() {
     const fetchData = async () => {
       try {
         setLoadingData(true);
+        setError(null);
         
-        // Fetch tournament data
-        const tournamentData = await getTournamentById(effectiveTournamentId);
+        // Handle 'current' by fetching the active tournament
+        let actualTournamentId = effectiveTournamentId;
+        let tournamentData;
+        
+        if (effectiveTournamentId === 'current') {
+          console.log('Fetching active tournament...');
+          tournamentData = await getTournamentState();
+          
+          if (!tournamentData) {
+            setError('No active tournament found. Please select a specific tournament.');
+            setLoadingData(false);
+            return;
+          }
+          
+          actualTournamentId = tournamentData.id;
+          console.log(`Found active tournament: ${tournamentData.name} (ID: ${actualTournamentId})`);
+        } else {
+          // Fetch specific tournament data
+          tournamentData = await getTournamentById(effectiveTournamentId);
+        }
+        
         if (!tournamentData) {
-          setError('Tournament not found');
+          setError(`Tournament not found. Please go back to the home page and select an active tournament.`);
           setLoadingData(false);
           return;
         }
         
         // Check if tournament is in submission phase
         if (tournamentData.currentPhase !== 'submission') {
-          setError('This tournament is not currently accepting submissions');
+          setError(`This tournament is currently in the ${tournamentData.currentPhase} phase and is not accepting submissions.`);
           setLoadingData(false);
           return;
         }
@@ -52,13 +72,13 @@ export default function SubmitDesignPage() {
         
         // Fetch user's existing entries for this tournament
         if (user) {
-          const entries = await getUserEntriesForTournament(user.id, effectiveTournamentId);
+          const entries = await getUserEntriesForTournament(user.id, actualTournamentId);
           setUserEntries(entries);
           
           // Check if user has reached entry limit
           if (tournamentData.maxEntriesPerUser !== null && 
               entries.length >= tournamentData.maxEntriesPerUser) {
-            setError(`You have reached the maximum number of entries (${tournamentData.maxEntriesPerUser}) for this tournament`);
+            setError(`You have reached the maximum number of entries (${tournamentData.maxEntriesPerUser}) for this tournament.`);
           }
         }
         
@@ -105,30 +125,20 @@ export default function SubmitDesignPage() {
       setError(null);
       setLoading(true);
       
-      // Track upload progress
-      const progressCallback = (progress: number) => {
-        setUploadProgress(progress);
-        console.log(`Upload progress: ${progress.toFixed(2)}%`);
-      };
-      
-      // Submit the entry
+      // Submit the entry to the actual tournament ID
       await submitEntry({
         title,
         description: description.trim(),
         image: imageFile,
         userId: user.id,
-        tournamentId: effectiveTournamentId
+        tournamentId: tournament.id
       });
       
       console.log('Design submitted successfully');
-      trackEvent('design_submitted', { title, tournamentId: effectiveTournamentId });
+      trackEvent('design_submitted', { title, tournamentId: tournament.id });
       
       // Redirect to tournament page
-      if (tournamentId) {
-        navigate(`/tournament/${tournamentId}`);
-      } else {
-        navigate('/dashboard');
-      }
+      navigate(`/tournament/${tournament.id}`);
       
     } catch (err: any) {
       console.error('Submit error:', err);
@@ -162,6 +172,24 @@ export default function SubmitDesignPage() {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  // If no tournament is found or there's an error, display error message with a back button
+  if (!tournament) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h1 className="text-xl font-bold text-red-600">Tournament Not Available</h1>
+          <p className="text-gray-700 mt-2">{error || "No tournament is available for submissions."}</p>
+          <button 
+            onClick={() => navigate('/')}
+            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+          >
+            Return to Home
+          </button>
+        </div>
       </div>
     );
   }
