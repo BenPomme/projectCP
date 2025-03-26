@@ -21,6 +21,7 @@ export default function TournamentSettingsPage() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [localVotingQuestion, setLocalVotingQuestion] = useState<string>('');
   const [stats, setStats] = useState<Stats>({
     totalEntries: 0,
     pendingEntries: 0,
@@ -42,6 +43,12 @@ export default function TournamentSettingsPage() {
 
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (tournamentState?.votingQuestion !== undefined) {
+      setLocalVotingQuestion(tournamentState.votingQuestion);
+    }
+  }, [tournamentState?.votingQuestion]);
 
   const fetchTournamentState = async () => {
     try {
@@ -152,17 +159,44 @@ export default function TournamentSettingsPage() {
   };
 
   const handleEntryLimitChange = async (value: string) => {
-    const maxEntries = value === '' ? null : parseInt(value);
-    await updateTournamentState({ maxEntriesPerUser: maxEntries });
+    try {
+      setError(null);
+      setSuccess(null);
+      const maxEntries = value === '' ? null : parseInt(value);
+      await updateTournamentState({ maxEntriesPerUser: maxEntries });
+      setSuccess('Entry limit updated successfully');
+      await fetchTournamentState();
+    } catch (err: any) {
+      console.error('Error updating entry limit:', err);
+      setError(err.message || 'Failed to update entry limit');
+    }
   };
 
   const handleVoteLimitChange = async (value: string) => {
-    const maxVotes = value === '' ? null : parseInt(value);
-    await updateTournamentState({ maxVotesPerUser: maxVotes });
+    try {
+      setError(null);
+      setSuccess(null);
+      const maxVotes = value === '' ? null : parseInt(value);
+      await updateTournamentState({ maxVotesPerUser: maxVotes });
+      setSuccess('Vote limit updated successfully');
+      await fetchTournamentState();
+    } catch (err: any) {
+      console.error('Error updating vote limit:', err);
+      setError(err.message || 'Failed to update vote limit');
+    }
   };
 
   const handleVotingQuestionChange = async (value: string) => {
-    await updateTournamentState({ votingQuestion: value });
+    try {
+      setError(null);
+      setSuccess(null);
+      await updateTournamentState({ votingQuestion: value });
+      setSuccess('Voting question updated successfully');
+      await fetchTournamentState();
+    } catch (err: any) {
+      console.error('Error updating voting question:', err);
+      setError(err.message || 'Failed to update voting question');
+    }
   };
 
   if (loading) {
@@ -328,13 +362,21 @@ export default function TournamentSettingsPage() {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Voting Question
           </label>
-          <input
-            type="text"
-            value={tournamentState?.votingQuestion || ''}
-            onChange={(e) => handleVotingQuestionChange(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            placeholder="Enter the question to display above the voting scale"
-          />
+          <div className="flex items-center space-x-2">
+            <input
+              type="text"
+              value={localVotingQuestion}
+              onChange={(e) => setLocalVotingQuestion(e.target.value)}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              placeholder="Enter the question to display above the voting scale"
+            />
+            <button
+              onClick={() => handleVotingQuestionChange(localVotingQuestion)}
+              className="mt-1 px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+            >
+              Save
+            </button>
+          </div>
         </div>
       </div>
 

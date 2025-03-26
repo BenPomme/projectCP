@@ -86,6 +86,23 @@ export default function VotingPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-3xl font-bold mb-8">Vote on Entries</h1>
       
+      {/* Vote Limits Info */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+        <h2 className="text-xl font-semibold mb-4">Your Voting Status</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-gray-600">Votes Cast:</p>
+            <p className="text-2xl font-bold text-primary-600">{Object.keys(userVotes).length}</p>
+          </div>
+          <div>
+            <p className="text-gray-600">Vote Limit:</p>
+            <p className="text-2xl font-bold text-primary-600">
+              {tournamentState?.maxVotesPerUser === null ? 'Unlimited' : tournamentState.maxVotesPerUser}
+            </p>
+          </div>
+        </div>
+      </div>
+      
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {entries.map((entry) => (
           <div key={entry.id} className="bg-white rounded-lg shadow-md p-6">

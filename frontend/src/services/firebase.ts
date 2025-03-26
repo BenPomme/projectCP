@@ -46,6 +46,10 @@ export interface Entry {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   voteCount: number;
+  averageRating: number;
+  status?: 'pending' | 'approved' | 'rejected';
+  userDisplayName?: string;
+  userPhotoURL?: string | null;
 }
 
 export interface Vote {
@@ -102,12 +106,13 @@ export const getCurrentUser = (): Promise<FirebaseUser | null> => {
 };
 
 // Entry functions
-export const createEntry = async (entry: Omit<Entry, 'id' | 'createdAt' | 'updatedAt' | 'voteCount'>) => {
+export const createEntry = async (entry: Omit<Entry, 'id' | 'createdAt' | 'updatedAt' | 'voteCount' | 'averageRating'>) => {
   const newEntry = {
     ...entry,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
-    voteCount: 0
+    voteCount: 0,
+    averageRating: 0
   };
   
   const docRef = await addDoc(collection(db, 'entries'), newEntry);
@@ -149,10 +154,16 @@ export const createVote = async (vote: Omit<Vote, 'id' | 'createdAt'>) => {
   
   const docRef = await addDoc(collection(db, 'votes'), newVote);
   
-  // Update entry vote count
+  // Get all votes for this entry
+  const votes = await getVotesForEntry(vote.entryId);
+  const totalRating = votes.reduce((sum, v) => sum + v.rating, 0);
+  const averageRating = totalRating / (votes.length + 1); // Include the new vote
+  
+  // Update entry vote count and average rating
   const entryRef = doc(db, 'entries', vote.entryId);
   await updateDoc(entryRef, {
-    voteCount: increment(1)
+    voteCount: increment(1),
+    averageRating: averageRating
   });
   
   return { id: docRef.id, ...newVote };
