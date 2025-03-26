@@ -1,13 +1,12 @@
 import { useState, useRef, FormEvent, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { db, storage } from '../config/firebase';
-import { collection, addDoc, Timestamp } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { useParams, useNavigate } from 'react-router-dom';
+import { submitEntry, getTournamentById, getUserEntriesForTournament } from '../services/firebase';
 import { trackEvent } from '../utils/analytics';
-import { useNavigate } from 'react-router-dom';
 
 export default function SubmitDesignPage() {
   const { user, loading: authLoading } = useAuth();
+  const { tournamentId } = useParams<{ tournamentId: string }>();
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -15,14 +14,66 @@ export default function SubmitDesignPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [tournament, setTournament] = useState<any>(null);
+  const [userEntries, setUserEntries] = useState<any[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Get the actual tournament ID or use 'current' for backward compatibility
+  const effectiveTournamentId = tournamentId || 'current';
 
   useEffect(() => {
     if (!authLoading && !user) {
       console.log('User not authenticated, redirecting to login');
       navigate('/login');
+      return;
     }
-  }, [user, authLoading, navigate]);
+
+    const fetchData = async () => {
+      try {
+        setLoadingData(true);
+        
+        // Fetch tournament data
+        const tournamentData = await getTournamentById(effectiveTournamentId);
+        if (!tournamentData) {
+          setError('Tournament not found');
+          setLoadingData(false);
+          return;
+        }
+        
+        // Check if tournament is in submission phase
+        if (tournamentData.currentPhase !== 'submission') {
+          setError('This tournament is not currently accepting submissions');
+          setLoadingData(false);
+          return;
+        }
+        
+        setTournament(tournamentData);
+        
+        // Fetch user's existing entries for this tournament
+        if (user) {
+          const entries = await getUserEntriesForTournament(user.id, effectiveTournamentId);
+          setUserEntries(entries);
+          
+          // Check if user has reached entry limit
+          if (tournamentData.maxEntriesPerUser !== null && 
+              entries.length >= tournamentData.maxEntriesPerUser) {
+            setError(`You have reached the maximum number of entries (${tournamentData.maxEntriesPerUser}) for this tournament`);
+          }
+        }
+        
+      } catch (err: any) {
+        console.error('Error fetching data:', err);
+        setError(err.message || 'Failed to load tournament data');
+      } finally {
+        setLoadingData(false);
+      }
+    };
+    
+    if (user) {
+      fetchData();
+    }
+  }, [user, authLoading, navigate, effectiveTournamentId]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -43,83 +94,42 @@ export default function SubmitDesignPage() {
       return;
     }
     
+    // Check if user has reached entry limit
+    if (tournament?.maxEntriesPerUser !== null && 
+        userEntries.length >= tournament.maxEntriesPerUser) {
+      setError(`You have reached the maximum number of entries (${tournament.maxEntriesPerUser}) for this tournament`);
+      return;
+    }
+    
     try {
       setError(null);
       setLoading(true);
       
-      // Upload image to Firebase Storage
-      const storageRef = ref(storage, `designs/${user!.id}/${Date.now()}_${imageFile.name}`);
-      const uploadTask = uploadBytesResumable(storageRef, imageFile);
+      // Track upload progress
+      const progressCallback = (progress: number) => {
+        setUploadProgress(progress);
+        console.log(`Upload progress: ${progress.toFixed(2)}%`);
+      };
       
-      console.log('Starting file upload to path:', `designs/${user!.id}/${Date.now()}_${imageFile.name}`);
+      // Submit the entry
+      await submitEntry({
+        title,
+        description: description.trim(),
+        image: imageFile,
+        userId: user.id,
+        tournamentId: effectiveTournamentId
+      });
       
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadProgress(progress);
-          console.log(`Upload progress: ${progress.toFixed(2)}%`);
-        },
-        (error) => {
-          console.error('Upload error:', error);
-          console.error('Error code:', error.code);
-          console.error('Error message:', error.message);
-          
-          let errorMessage = 'Failed to upload image. ';
-          
-          // Add more specific error messages based on Firebase Storage error codes
-          switch(error.code) {
-            case 'storage/unauthorized':
-              errorMessage += 'You do not have permission to upload to this location.';
-              break;
-            case 'storage/canceled':
-              errorMessage += 'Upload was canceled.';
-              break;
-            case 'storage/unknown':
-            default:
-              errorMessage += 'An unknown error occurred. Please try again.';
-              break;
-          }
-          
-          setError(errorMessage);
-          setLoading(false);
-        },
-        async () => {
-          // Get download URL
-          try {
-            console.log('Upload completed, getting download URL');
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            console.log('Download URL received:', downloadURL);
-            
-            // Add entry to Firestore
-            console.log('Creating Firestore entry');
-            const entriesRef = collection(db, 'entries');
-            await addDoc(entriesRef, {
-              title,
-              description: description.trim() || null,
-              imageUrl: downloadURL,
-              userId: user!.id,
-              userDisplayName: user!.displayName || user!.email,
-              userPhotoURL: user!.photoURL || null,
-              createdAt: Timestamp.now(),
-              updatedAt: Timestamp.now(),
-              voteCount: 0,
-              averageRating: 0,
-              status: 'pending' // pending, approved, rejected
-            });
-            
-            console.log('Design submitted successfully');
-            trackEvent('design_submitted', { title });
-            
-            // Redirect to dashboard
-            navigate('/dashboard');
-          } catch (err: any) {
-            console.error('Error in final upload stage:', err);
-            setError(err.message || 'Failed to complete submission. Please try again.');
-            setLoading(false);
-          }
-        }
-      );
+      console.log('Design submitted successfully');
+      trackEvent('design_submitted', { title, tournamentId: effectiveTournamentId });
+      
+      // Redirect to tournament page
+      if (tournamentId) {
+        navigate(`/tournament/${tournamentId}`);
+      } else {
+        navigate('/dashboard');
+      }
+      
     } catch (err: any) {
       console.error('Submit error:', err);
       setError(err.message || 'Failed to submit design. Please try again.');
@@ -148,6 +158,19 @@ export default function SubmitDesignPage() {
     }
   };
   
+  if (loadingData) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  // Calculate remaining entries
+  const remainingEntries = tournament?.maxEntriesPerUser === null 
+    ? 'Unlimited' 
+    : tournament?.maxEntriesPerUser - userEntries.length;
+  
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="md:grid md:grid-cols-3 md:gap-6">
@@ -155,9 +178,24 @@ export default function SubmitDesignPage() {
           <div className="px-4 sm:px-0">
             <h3 className="text-lg font-medium leading-6 text-gray-900">Submit Your Design</h3>
             <p className="mt-1 text-sm text-gray-600">
-              Submit your design for the current competition. Please make sure your image clearly 
+              Submit your design for {tournament?.name || 'the current competition'}. Please make sure your image clearly 
               shows your concept.
             </p>
+            
+            {tournament && (
+              <div className="mt-4">
+                <h4 className="text-sm font-medium text-gray-700">Tournament Details</h4>
+                <p className="text-sm text-gray-600">
+                  Submission Phase Ends: {tournament.submissionPhaseEnd.toLocaleDateString()}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Your Entries: {userEntries.length} / {tournament.maxEntriesPerUser === null ? '∞' : tournament.maxEntriesPerUser}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Remaining Entries: {remainingEntries}
+                </p>
+              </div>
+            )}
           </div>
         </div>
         <div className="mt-5 md:mt-0 md:col-span-2">
@@ -182,6 +220,7 @@ export default function SubmitDesignPage() {
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
                       required
+                      disabled={loading || (tournament?.maxEntriesPerUser !== null && userEntries.length >= tournament?.maxEntriesPerUser)}
                     />
                   </div>
                 </div>
@@ -197,6 +236,7 @@ export default function SubmitDesignPage() {
                       className="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md"
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
+                      disabled={loading || (tournament?.maxEntriesPerUser !== null && userEntries.length >= tournament?.maxEntriesPerUser)}
                     />
                   </div>
                 </div>
@@ -210,6 +250,7 @@ export default function SubmitDesignPage() {
                       type="button"
                       className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                       onClick={() => fileInputRef.current?.click()}
+                      disabled={loading || (tournament?.maxEntriesPerUser !== null && userEntries.length >= tournament?.maxEntriesPerUser)}
                     >
                       Choose file
                     </button>
@@ -219,6 +260,7 @@ export default function SubmitDesignPage() {
                       className="hidden"
                       accept="image/*"
                       onChange={handleFileChange}
+                      disabled={loading || (tournament?.maxEntriesPerUser !== null && userEntries.length >= tournament?.maxEntriesPerUser)}
                     />
                     <span className="ml-2 text-sm text-gray-500">
                       {imageFile ? imageFile.name : 'No file chosen'}
@@ -254,20 +296,21 @@ export default function SubmitDesignPage() {
                       <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-primary-200">
                         <div
                           style={{ width: `${uploadProgress}%` }}
-                          className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-primary-500"
+                          className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-primary-500 transition-all duration-300"
                         ></div>
                       </div>
                     </div>
                   </div>
                 )}
               </div>
+              
               <div className="px-4 py-3 bg-gray-50 text-right sm:px-6">
                 <button
                   type="submit"
-                  className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                  disabled={loading}
+                  className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={loading || !imageFile || !title.trim() || (tournament?.maxEntriesPerUser !== null && userEntries.length >= tournament?.maxEntriesPerUser)}
                 >
-                  {loading ? 'Submitting...' : 'Submit Design'}
+                  {loading ? 'Submitting...' : 'Submit'}
                 </button>
               </div>
             </div>

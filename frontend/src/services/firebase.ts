@@ -40,6 +40,7 @@ export interface User {
 export interface Entry {
   id: string;
   userId: string;
+  tournamentId: string;
   title: string;
   description?: string;
   imageUrl: string;
@@ -56,6 +57,7 @@ export interface Vote {
   id: string;
   userId: string;
   entryId: string;
+  tournamentId: string;
   rating: number;
   createdAt: Timestamp;
 }
@@ -128,8 +130,68 @@ export const getEntry = async (id: string): Promise<Entry | null> => {
   return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Entry : null;
 };
 
-export const getEntries = async (): Promise<Entry[]> => {
-  const entriesQuery = query(collection(db, 'entries'), orderBy('createdAt', 'desc'));
+// Get all entries for a specific tournament
+export const getEntriesForTournament = async (tournamentId: string): Promise<Entry[]> => {
+  const entriesQuery = query(
+    collection(db, 'entries'),
+    where('tournamentId', '==', tournamentId),
+    orderBy('createdAt', 'desc')
+  );
+  const querySnapshot = await getDocs(entriesQuery);
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }) as Entry);
+};
+
+// Get all entries (for backward compatibility)
+export const getEntries = async (tournamentId?: string): Promise<Entry[]> => {
+  try {
+    if (tournamentId) {
+      return getEntriesForTournament(tournamentId);
+    }
+    
+    // Try to get the active tournament
+    const activeTournament = await getTournamentState();
+    if (activeTournament) {
+      return getEntriesForTournament(activeTournament.id);
+    }
+    
+    // Fallback to all entries
+    const entriesQuery = query(collection(db, 'entries'), orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(entriesQuery);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }) as Entry);
+  } catch (error) {
+    console.error('Error getting entries:', error);
+    return [];
+  }
+};
+
+// Get entries submitted by a specific user for a specific tournament
+export const getUserEntriesForTournament = async (userId: string, tournamentId: string): Promise<Entry[]> => {
+  const entriesQuery = query(
+    collection(db, 'entries'),
+    where('userId', '==', userId),
+    where('tournamentId', '==', tournamentId),
+    orderBy('createdAt', 'desc')
+  );
+  const querySnapshot = await getDocs(entriesQuery);
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }) as Entry);
+};
+
+// Get all entries submitted by a specific user
+export const getUserEntries = async (userId: string): Promise<Entry[]> => {
+  const entriesQuery = query(
+    collection(db, 'entries'),
+    where('userId', '==', userId),
+    orderBy('createdAt', 'desc')
+  );
   const querySnapshot = await getDocs(entriesQuery);
   return querySnapshot.docs.map(doc => ({
     id: doc.id,
@@ -263,19 +325,56 @@ export const getVotes = async (userId: string): Promise<Record<string, number>> 
   }
 };
 
-export const submitVote = async (entryId: string, rating: number): Promise<void> => {
+// Get votes for a specific tournament
+export const getTournamentVotes = async (tournamentId: string): Promise<Vote[]> => {
+  const votesQuery = query(
+    collection(db, 'votes'),
+    where('tournamentId', '==', tournamentId)
+  );
+  const querySnapshot = await getDocs(votesQuery);
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  })) as Vote[];
+};
+
+// Get votes by a user for a specific tournament
+export const getUserVotesForTournament = async (userId: string, tournamentId: string): Promise<Record<string, number>> => {
+  try {
+    const votesQuery = query(
+      collection(db, 'votes'),
+      where('userId', '==', userId),
+      where('tournamentId', '==', tournamentId)
+    );
+    const querySnapshot = await getDocs(votesQuery);
+    
+    const votesMap: Record<string, number> = {};
+    querySnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      votesMap[data.entryId] = data.rating;
+    });
+    
+    return votesMap;
+  } catch (error) {
+    console.error(`Error getting votes for user ${userId} in tournament ${tournamentId}:`, error);
+    return {};
+  }
+};
+
+export const submitVote = async (entryId: string, rating: number, tournamentId: string): Promise<void> => {
   try {
     const user = auth.currentUser;
     if (!user) {
       throw new Error('You must be logged in to vote');
     }
 
-    console.log(`Submitting vote for entry ${entryId} with rating ${rating}`);
+    console.log(`Submitting vote for entry ${entryId} with rating ${rating} in tournament ${tournamentId}`);
     
     // Create the vote
     const voteResult = await createVote({
       userId: user.uid,
       entryId,
+      tournamentId,
       rating
     });
     
@@ -299,12 +398,19 @@ export const deleteImage = async (path: string): Promise<void> => {
   await deleteObject(storageRef);
 };
 
-// Entry submission helper
-export const submitEntry = async ({ title, description, image, userId }: { 
+// Entry submission helper with tournament ID
+export const submitEntry = async ({ 
+  title, 
+  description, 
+  image, 
+  userId, 
+  tournamentId 
+}: { 
   title: string; 
   description: string; 
   image: File;
   userId: string;
+  tournamentId: string;
 }): Promise<Entry> => {
   try {
     // Get user
@@ -312,12 +418,13 @@ export const submitEntry = async ({ title, description, image, userId }: {
     const userData = userDoc.data();
     
     // Upload image
-    const imagePath = `entries/${userId}/${Date.now()}_${image.name}`;
+    const imagePath = `entries/${tournamentId}/${userId}/${Date.now()}_${image.name}`;
     const imageUrl = await uploadImage(image, imagePath);
     
     // Create entry with user display name
     const entry = await createEntry({
       userId,
+      tournamentId,
       title,
       description,
       imageUrl,
@@ -341,59 +448,158 @@ const convertTimestampToDate = (timestamp: any): Date => {
   return new Date(timestamp);
 };
 
-export const getTournamentState = async (): Promise<TournamentState | null> => {
+// Get all tournaments
+export const getTournaments = async (): Promise<TournamentState[]> => {
   try {
-    // First check the new location
-    const stateDoc = await getDoc(doc(db, 'tournament', 'state'));
-    console.log("Checking 'tournament/state' location:", stateDoc.exists());
+    console.log("Fetching all tournaments...");
+    const tournamentsSnapshot = await getDocs(collection(db, 'tournaments'));
     
-    // If state doc doesn't exist, check the old location
-    if (!stateDoc.exists()) {
-      console.log("State not found in 'tournament/state', checking 'tournament/current'");
-      const currentDoc = await getDoc(doc(db, 'tournament', 'current'));
-      console.log("Found in 'tournament/current':", currentDoc.exists());
-      
-      // If found in old location, migrate it to new location
-      if (currentDoc.exists()) {
-        console.log("Migrating data from 'current' to 'state'");
-        const data = currentDoc.data();
-        await setDoc(doc(db, 'tournament', 'state'), data);
-        console.log("Migration complete");
-        
-        // Return the migrated data
-        const result = {
-          ...data,
-          submissionPhaseStart: convertTimestampToDate(data.submissionPhaseStart),
-          submissionPhaseEnd: convertTimestampToDate(data.submissionPhaseEnd),
-          votingPhaseStart: convertTimestampToDate(data.votingPhaseStart),
-          votingPhaseEnd: convertTimestampToDate(data.votingPhaseEnd),
-        };
-        
-        console.log("Processed migrated tournament state:", result);
-        console.log("Voting question after migration:", result.votingQuestion);
-        
-        return result;
-      }
-      
-      console.log("Tournament state not found in either location, returning null");
+    const tournaments = tournamentsSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        ...data,
+        id: doc.id,
+        submissionPhaseStart: convertTimestampToDate(data.submissionPhaseStart),
+        submissionPhaseEnd: convertTimestampToDate(data.submissionPhaseEnd),
+        votingPhaseStart: convertTimestampToDate(data.votingPhaseStart),
+        votingPhaseEnd: convertTimestampToDate(data.votingPhaseEnd),
+        createdAt: convertTimestampToDate(data.createdAt),
+        updatedAt: convertTimestampToDate(data.updatedAt),
+      } as TournamentState;
+    });
+    
+    console.log(`Found ${tournaments.length} tournaments`);
+    return tournaments;
+  } catch (error) {
+    console.error('Error getting tournaments:', error);
+    throw error;
+  }
+};
+
+// Get tournaments owned by a specific user
+export const getUserTournaments = async (userId: string): Promise<TournamentState[]> => {
+  try {
+    console.log(`Fetching tournaments for user ${userId}...`);
+    const tournamentsQuery = query(
+      collection(db, 'tournaments'),
+      where('ownerId', '==', userId)
+    );
+    
+    const tournamentsSnapshot = await getDocs(tournamentsQuery);
+    
+    const tournaments = tournamentsSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        ...data,
+        id: doc.id,
+        submissionPhaseStart: convertTimestampToDate(data.submissionPhaseStart),
+        submissionPhaseEnd: convertTimestampToDate(data.submissionPhaseEnd),
+        votingPhaseStart: convertTimestampToDate(data.votingPhaseStart),
+        votingPhaseEnd: convertTimestampToDate(data.votingPhaseEnd),
+        createdAt: convertTimestampToDate(data.createdAt),
+        updatedAt: convertTimestampToDate(data.updatedAt),
+      } as TournamentState;
+    });
+    
+    console.log(`Found ${tournaments.length} tournaments for user ${userId}`);
+    return tournaments;
+  } catch (error) {
+    console.error(`Error getting tournaments for user ${userId}:`, error);
+    throw error;
+  }
+};
+
+// Get a specific tournament by ID
+export const getTournamentById = async (tournamentId: string): Promise<TournamentState | null> => {
+  try {
+    console.log(`Fetching tournament with ID ${tournamentId}...`);
+    const tournamentDoc = await getDoc(doc(db, 'tournaments', tournamentId));
+    
+    if (!tournamentDoc.exists()) {
+      console.log(`Tournament with ID ${tournamentId} not found`);
       return null;
     }
     
-    const data = stateDoc.data() as TournamentState;
-    
-    // Convert Firestore timestamps to JS Dates
-    const result = {
+    const data = tournamentDoc.data();
+    const tournament = {
       ...data,
+      id: tournamentDoc.id,
       submissionPhaseStart: convertTimestampToDate(data.submissionPhaseStart),
       submissionPhaseEnd: convertTimestampToDate(data.submissionPhaseEnd),
       votingPhaseStart: convertTimestampToDate(data.votingPhaseStart),
       votingPhaseEnd: convertTimestampToDate(data.votingPhaseEnd),
-    };
+      createdAt: convertTimestampToDate(data.createdAt),
+      updatedAt: convertTimestampToDate(data.updatedAt),
+    } as TournamentState;
     
-    console.log("Processed tournament state:", result);
-    console.log("Voting question from tournament state:", result.votingQuestion);
+    console.log(`Tournament found:`, tournament);
+    return tournament;
+  } catch (error) {
+    console.error(`Error getting tournament with ID ${tournamentId}:`, error);
+    throw error;
+  }
+};
+
+// Get the current active tournament (for backward compatibility)
+export const getTournamentState = async (): Promise<TournamentState | null> => {
+  try {
+    // First check for any tournaments that are in the submission or voting phase
+    const tournamentsQuery = query(
+      collection(db, 'tournaments'),
+      where('currentPhase', 'in', ['submission', 'voting']),
+      orderBy('createdAt', 'desc'),
+      limit(1)
+    );
     
-    return result;
+    const tournamentsSnapshot = await getDocs(tournamentsQuery);
+    
+    if (!tournamentsSnapshot.empty) {
+      const data = tournamentsSnapshot.docs[0].data();
+      return {
+        ...data,
+        id: tournamentsSnapshot.docs[0].id,
+        submissionPhaseStart: convertTimestampToDate(data.submissionPhaseStart),
+        submissionPhaseEnd: convertTimestampToDate(data.submissionPhaseEnd),
+        votingPhaseStart: convertTimestampToDate(data.votingPhaseStart),
+        votingPhaseEnd: convertTimestampToDate(data.votingPhaseEnd),
+        createdAt: convertTimestampToDate(data.createdAt),
+        updatedAt: convertTimestampToDate(data.updatedAt),
+      } as TournamentState;
+    }
+    
+    // For backward compatibility, check the old location
+    console.log("No active tournaments found in 'tournaments' collection, checking legacy location");
+    const stateDoc = await getDoc(doc(db, 'tournament', 'state'));
+    
+    if (stateDoc.exists()) {
+      console.log("Found tournament state in legacy location");
+      const data = stateDoc.data();
+      const legacyTournament = {
+        ...data,
+        id: 'state',
+        tournamentId: 'legacy',
+        name: 'Legacy Tournament',
+        ownerId: 'admin',
+        submissionPhaseStart: convertTimestampToDate(data.submissionPhaseStart),
+        submissionPhaseEnd: convertTimestampToDate(data.submissionPhaseEnd),
+        votingPhaseStart: convertTimestampToDate(data.votingPhaseStart),
+        votingPhaseEnd: convertTimestampToDate(data.votingPhaseEnd),
+        createdAt: convertTimestampToDate(data.createdAt || new Date()),
+        updatedAt: convertTimestampToDate(data.updatedAt || new Date()),
+      };
+      
+      // Migrate the legacy tournament to the new collection
+      console.log("Migrating legacy tournament to new collection...");
+      const newTournamentRef = await addDoc(collection(db, 'tournaments'), legacyTournament);
+      
+      return {
+        ...legacyTournament,
+        id: newTournamentRef.id
+      } as TournamentState;
+    }
+    
+    console.log("No tournament state found");
+    return null;
   } catch (error) {
     console.error('Error getting tournament state:', error);
     throw error;
@@ -402,42 +608,84 @@ export const getTournamentState = async (): Promise<TournamentState | null> => {
 
 export const updateTournamentState = async (updates: Partial<TournamentState>): Promise<void> => {
   try {
-    console.log("Updating tournament state with:", updates);
-    console.log("Voting question being updated:", updates.votingQuestion);
+    if (!updates.id) {
+      throw new Error('Tournament ID is required for updates');
+    }
     
-    await setDoc(doc(db, 'tournament', 'state'), updates, { merge: true });
+    const tournamentId = updates.id;
+    console.log(`Updating tournament ${tournamentId} with:`, updates);
     
-    console.log("Tournament state updated successfully");
+    // Remove the id from updates since it's not a field in the document
+    const { id, ...docUpdates } = updates;
+    
+    await updateDoc(doc(db, 'tournaments', tournamentId), {
+      ...docUpdates,
+      updatedAt: new Date()
+    });
+    
+    console.log(`Tournament ${tournamentId} updated successfully`);
   } catch (error) {
-    console.error('Error updating tournament state:', error);
+    console.error('Error updating tournament:', error);
     throw error;
   }
 };
 
-export const initializeTournamentState = async (): Promise<void> => {
+export const createTournament = async (
+  name: string, 
+  ownerId: string,
+  submissionDays: number = 7,
+  votingDays: number = 7
+): Promise<TournamentState> => {
   try {
-    console.log("Initializing tournament state...");
+    console.log(`Creating new tournament "${name}" for user ${ownerId}`);
     
     const now = new Date();
-    const submissionEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-    const votingEnd = new Date(submissionEnd.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days after submission
+    const submissionEnd = new Date(now.getTime() + submissionDays * 24 * 60 * 60 * 1000);
+    const votingEnd = new Date(submissionEnd.getTime() + votingDays * 24 * 60 * 60 * 1000);
     
-    const initialState: TournamentState = {
+    const tournamentData = {
+      name,
+      ownerId,
+      tournamentId: `tournament_${Date.now()}`,
       currentPhase: 'submission',
       submissionPhaseStart: now,
       submissionPhaseEnd: submissionEnd,
       votingPhaseStart: submissionEnd,
       votingPhaseEnd: votingEnd,
-      maxEntriesPerUser: null, // No limit initially
-      maxVotesPerUser: null, // No limit initially
-      votingQuestion: "How would you rate this entry?" // Default question
+      maxEntriesPerUser: null,
+      maxVotesPerUser: null,
+      votingQuestion: "How would you rate this entry?",
+      createdAt: now,
+      updatedAt: now
     };
     
-    console.log("Initial tournament state:", initialState);
+    console.log("Tournament data:", tournamentData);
     
-    await setDoc(doc(db, 'tournament', 'state'), initialState);
+    const docRef = await addDoc(collection(db, 'tournaments'), tournamentData);
     
-    console.log("Tournament state initialized successfully");
+    return {
+      ...tournamentData,
+      id: docRef.id
+    } as TournamentState;
+  } catch (error) {
+    console.error('Error creating tournament:', error);
+    throw error;
+  }
+};
+
+export const initializeTournamentState = async (): Promise<TournamentState> => {
+  try {
+    console.log("Initializing tournament state...");
+    
+    // Check if we have a default tournament already
+    const tournamentState = await getTournamentState();
+    if (tournamentState) {
+      console.log("Existing tournament found, returning it");
+      return tournamentState;
+    }
+    
+    // Create a new default tournament
+    return await createTournament('Default Tournament', 'admin');
   } catch (error) {
     console.error('Error initializing tournament state:', error);
     throw error;

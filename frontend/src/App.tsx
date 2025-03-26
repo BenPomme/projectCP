@@ -13,11 +13,13 @@ import EntriesAdminPage from './pages/admin/EntriesAdminPage';
 import HomePage from './pages/HomePage';
 import DashboardPage from './pages/DashboardPage';
 import SubmitDesignPage from './pages/SubmitDesignPage';
-import VotePage from './pages/VotePage';
+import VotingPage from './pages/VotingPage';
 import WinnersPage from './pages/WinnersPage';
 import DebugAuthPage from './pages/DebugAuthPage';
 import { useEffect } from 'react';
 import { handleRedirectResult } from './services/authService';
+import CreateTournamentPage from './pages/CreateTournamentPage';
+import TournamentPage from './pages/TournamentPage';
 
 // Create a client
 const queryClient = new QueryClient();
@@ -54,11 +56,8 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
   
-  // Temporarily allow any logged-in user to access admin pages for debugging
+  // Check if user is an admin or the owner of the tournament
   return user ? <>{children}</> : <Navigate to="/" />;
-  
-  // Original code - will restore this after testing:
-  // return user?.isAdmin ? <>{children}</> : <Navigate to="/" />;
 };
 
 function App() {
@@ -80,6 +79,26 @@ function App() {
               <Route path="reset-password" element={<ResetPasswordForm />} />
               <Route path="winners" element={<WinnersPage />} />
               <Route path="debug-auth" element={<DebugAuthPage />} />
+              
+              {/* Tournament routes */}
+              <Route path="tournament/:tournamentId" element={<TournamentPage />} />
+              <Route
+                path="tournament/:tournamentId/submit"
+                element={
+                  <PrivateRoute>
+                    <SubmitDesignPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="tournament/:tournamentId/vote"
+                element={
+                  <PrivateRoute>
+                    <VotingPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route path="tournament/:tournamentId/winners" element={<WinnersPage />} />
 
               {/* Protected routes */}
               <Route
@@ -94,7 +113,7 @@ function App() {
                 path="vote"
                 element={
                   <PrivateRoute>
-                    <VotePage />
+                    <VotingPage />
                   </PrivateRoute>
                 }
               />
@@ -111,6 +130,14 @@ function App() {
                 element={
                   <PrivateRoute>
                     <DashboardPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="create-tournament"
+                element={
+                  <PrivateRoute>
+                    <CreateTournamentPage />
                   </PrivateRoute>
                 }
               />
@@ -137,6 +164,22 @@ function App() {
                 element={
                   <AdminRoute>
                     <TournamentSettingsPage />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="admin/tournament/:tournamentId/settings"
+                element={
+                  <AdminRoute>
+                    <TournamentSettingsPage />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="admin/tournament/:tournamentId/entries"
+                element={
+                  <AdminRoute>
+                    <EntriesAdminPage />
                   </AdminRoute>
                 }
               />
