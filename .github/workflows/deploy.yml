@@ -14,6 +14,8 @@ on:
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v3
@@ -54,4 +56,12 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./frontend/dist
           publish_branch: gh-pages
-          commit_message: ${{ github.event.head_commit.message }} 
+          commit_message: ${{ github.event.head_commit.message }}
+
+      # Add fallback manual deployment if the above fails
+      - name: Deploy to GitHub Pages (fallback)
+        if: ${{ failure() }}
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: ./frontend/dist
+          branch: gh-pages 
