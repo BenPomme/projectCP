@@ -14,21 +14,27 @@ export default function VotingPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [state, entriesData, votesData] = await Promise.all([
-        getTournamentState(),
-        getEntries(),
-        getVotes(user?.id || '')
-      ]);
-
+      console.log("Fetching tournament state and entries...");
+      
+      const state = await getTournamentState();
+      console.log("Tournament state:", state);
       setTournamentState(state);
+      
+      const entriesData = await getEntries();
+      console.log("Entries:", entriesData);
       setEntries(entriesData);
-      setUserVotes(votesData);
+      
+      if (user?.id) {
+        const votesData = await getVotes(user.id);
+        console.log("User votes:", votesData);
+        setUserVotes(votesData);
 
-      // Check if user has reached vote limit
-      if (state?.maxVotesPerUser !== null) {
-        const voteCount = Object.keys(votesData).length;
-        if (voteCount >= state.maxVotesPerUser) {
-          setError(`You have reached the maximum number of votes (${state.maxVotesPerUser})`);
+        // Check if user has reached vote limit
+        if (state?.maxVotesPerUser !== null) {
+          const voteCount = Object.keys(votesData).length;
+          if (voteCount >= state.maxVotesPerUser) {
+            setError(`You have reached the maximum number of votes (${state.maxVotesPerUser})`);
+          }
         }
       }
     } catch (err) {
@@ -44,6 +50,11 @@ export default function VotingPage() {
   }, [user?.id]);
 
   const handleVote = async (entryId: string, rating: number) => {
+    if (!user?.id) {
+      setError('You must be logged in to vote');
+      return;
+    }
+    
     try {
       // Check if user has already voted for this entry
       if (userVotes[entryId]) {
@@ -60,6 +71,7 @@ export default function VotingPage() {
         }
       }
 
+      console.log(`Submitting vote: Entry ID ${entryId}, Rating ${rating}`);
       await submitVote(entryId, rating);
       
       // Update local state temporarily
@@ -76,7 +88,7 @@ export default function VotingPage() {
   };
 
   if (loading) {
-    return <div className="animate-pulse">Loading...</div>;
+    return <div className="animate-pulse p-8 text-center">Loading entries and votes...</div>;
   }
 
   if (error) {
@@ -107,6 +119,9 @@ export default function VotingPage() {
               {tournamentState?.maxVotesPerUser === null ? 'Unlimited' : tournamentState.maxVotesPerUser}
             </p>
           </div>
+        </div>
+        <div className="mt-4 text-sm text-gray-500">
+          <p>Voting Question: <span className="font-medium">{tournamentState?.votingQuestion || "How would you rate this entry?"}</span></p>
         </div>
       </div>
       
@@ -140,6 +155,7 @@ export default function VotingPage() {
               entryId={entry.id}
               onVote={(rating) => handleVote(entry.id, rating)}
               currentRating={userVotes[entry.id]}
+              tournamentState={tournamentState}
             />
           </div>
         ))}

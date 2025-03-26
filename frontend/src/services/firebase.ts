@@ -69,6 +69,9 @@ export interface TournamentState {
   votingPhaseEnd: Date;
   createdAt: Date;
   updatedAt: Date;
+  maxEntriesPerUser: number | null; // null means unlimited
+  maxVotesPerUser: number | null; // null means unlimited
+  votingQuestion: string; // Question to display above the voting scale
 }
 
 // Auth functions
@@ -157,16 +160,43 @@ export const createVote = async (vote: Omit<Vote, 'id' | 'createdAt'>) => {
   
   const docRef = await addDoc(collection(db, 'votes'), newVote);
   
-  // Get all votes for this entry
-  const votes = await getVotesForEntry(vote.entryId);
-  const totalRating = votes.reduce((sum, v) => sum + v.rating, 0);
-  const averageRating = totalRating / (votes.length + 1); // Include the new vote
+  // Get all votes for this entry including this new one
+  const entryRef = doc(db, 'entries', vote.entryId);
+  const entrySnap = await getDoc(entryRef);
+  
+  if (!entrySnap.exists()) {
+    console.error('Entry does not exist');
+    throw new Error('Entry does not exist');
+  }
+  
+  const entry = entrySnap.data();
+  
+  // Calculate new vote count and average
+  const newVoteCount = (entry.voteCount || 0) + 1;
+  
+  // If this is the first vote, the average is just the rating
+  // Otherwise calculate weighted average based on previous average and votes
+  let newAverageRating;
+  if (entry.voteCount === 0 || entry.voteCount === undefined) {
+    newAverageRating = vote.rating;
+  } else {
+    // Calculate total points from previous votes
+    const previousTotalPoints = entry.averageRating * entry.voteCount;
+    // Add new vote points
+    const newTotalPoints = previousTotalPoints + vote.rating;
+    // Calculate new average
+    newAverageRating = newTotalPoints / newVoteCount;
+  }
+  
+  console.log(`Updating entry ${vote.entryId}:`, {
+    voteCount: newVoteCount,
+    averageRating: newAverageRating
+  });
   
   // Update entry vote count and average rating
-  const entryRef = doc(db, 'entries', vote.entryId);
   await updateDoc(entryRef, {
-    voteCount: increment(1),
-    averageRating: averageRating
+    voteCount: newVoteCount,
+    averageRating: newAverageRating
   });
   
   return { id: docRef.id, ...newVote };
@@ -213,12 +243,16 @@ export const submitVote = async (entryId: string, rating: number): Promise<void>
       throw new Error('You must be logged in to vote');
     }
 
+    console.log(`Creating vote for entry ${entryId} with rating ${rating}`);
+    
     // Create the vote
     await createVote({
       userId: user.uid,
       entryId,
       rating
     });
+    
+    console.log(`Vote created successfully for entry ${entryId}`);
     
   } catch (error) {
     console.error('Error submitting vote:', error);
@@ -294,7 +328,10 @@ export const getTournamentState = async (): Promise<TournamentState | null> => {
       votingPhaseStart: data.votingPhaseStart?.toDate() || new Date(),
       votingPhaseEnd: data.votingPhaseEnd?.toDate() || new Date(),
       createdAt: data.createdAt?.toDate() || new Date(),
-      updatedAt: data.updatedAt?.toDate() || new Date()
+      updatedAt: data.updatedAt?.toDate() || new Date(),
+      maxEntriesPerUser: data.maxEntriesPerUser || null,
+      maxVotesPerUser: data.maxVotesPerUser || null,
+      votingQuestion: data.votingQuestion || "How would you rate this entry?"
     } as TournamentState;
   }
 
@@ -307,7 +344,10 @@ export const getTournamentState = async (): Promise<TournamentState | null> => {
     votingPhaseStart: data.votingPhaseStart?.toDate() || new Date(),
     votingPhaseEnd: data.votingPhaseEnd?.toDate() || new Date(),
     createdAt: data.createdAt?.toDate() || new Date(),
-    updatedAt: data.updatedAt?.toDate() || new Date()
+    updatedAt: data.updatedAt?.toDate() || new Date(),
+    maxEntriesPerUser: data.maxEntriesPerUser || null,
+    maxVotesPerUser: data.maxVotesPerUser || null,
+    votingQuestion: data.votingQuestion || "How would you rate this entry?"
   } as TournamentState;
 };
 

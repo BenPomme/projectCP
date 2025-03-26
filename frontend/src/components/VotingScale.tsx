@@ -6,18 +6,28 @@ interface VotingScaleProps {
   entryId: string;
   onVote: (rating: number) => Promise<void>;
   currentRating?: number;
+  tournamentState?: any; // Accept tournament state from parent
 }
 
-export default function VotingScale({ entryId, onVote, currentRating }: VotingScaleProps) {
-  const [tournamentState, setTournamentState] = React.useState<any>(null);
-  const [loading, setLoading] = React.useState(true);
+export default function VotingScale({ entryId, onVote, currentRating, tournamentState: propsTournamentState }: VotingScaleProps) {
+  const [localTournamentState, setLocalTournamentState] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(!propsTournamentState);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    // If tournament state is provided via props, use it
+    if (propsTournamentState) {
+      setLocalTournamentState(propsTournamentState);
+      setLoading(false);
+      return;
+    }
+
+    // Otherwise fetch it
     const fetchTournamentState = async () => {
       try {
         const state = await getTournamentState();
-        setTournamentState(state);
+        console.log("Fetched tournament state:", state);
+        setLocalTournamentState(state);
       } catch (err) {
         setError('Failed to load tournament settings');
         console.error('Error fetching tournament state:', err);
@@ -27,7 +37,7 @@ export default function VotingScale({ entryId, onVote, currentRating }: VotingSc
     };
 
     fetchTournamentState();
-  }, []);
+  }, [propsTournamentState]);
 
   if (loading) {
     return <div className="animate-pulse">Loading voting options...</div>;
@@ -37,12 +47,16 @@ export default function VotingScale({ entryId, onVote, currentRating }: VotingSc
     return <div className="text-red-500">{error}</div>;
   }
 
+  const tournamentState = propsTournamentState || localTournamentState;
   const isDisabled = currentRating !== undefined;
+  const votingQuestion = tournamentState?.votingQuestion || "How would you rate this entry?";
+
+  console.log("Voting question:", votingQuestion);
 
   return (
     <div className="space-y-4">
       <p className="text-lg font-medium text-gray-900">
-        {tournamentState?.votingQuestion || "How would you rate this entry?"}
+        {votingQuestion}
       </p>
       
       <div className="flex items-center space-x-4">
