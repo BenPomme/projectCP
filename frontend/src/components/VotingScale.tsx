@@ -13,11 +13,17 @@ export default function VotingScale({ entryId, onVote, currentRating, tournament
   const [localTournamentState, setLocalTournamentState] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(!propsTournamentState);
   const [error, setError] = React.useState<string | null>(null);
+  const [question, setQuestion] = React.useState<string>("Rate this design:");
 
   React.useEffect(() => {
     // If tournament state is provided via props, use it
     if (propsTournamentState) {
+      console.log("Tournament state from props:", propsTournamentState);
+      console.log("Voting question from props:", propsTournamentState.votingQuestion);
       setLocalTournamentState(propsTournamentState);
+      if (propsTournamentState.votingQuestion) {
+        setQuestion(propsTournamentState.votingQuestion);
+      }
       setLoading(false);
       return;
     }
@@ -27,7 +33,11 @@ export default function VotingScale({ entryId, onVote, currentRating, tournament
       try {
         const state = await getTournamentState();
         console.log("Fetched tournament state:", state);
+        console.log("Fetched voting question:", state?.votingQuestion);
         setLocalTournamentState(state);
+        if (state?.votingQuestion) {
+          setQuestion(state.votingQuestion);
+        }
       } catch (err) {
         setError('Failed to load tournament settings');
         console.error('Error fetching tournament state:', err);
@@ -47,16 +57,12 @@ export default function VotingScale({ entryId, onVote, currentRating, tournament
     return <div className="text-red-500">{error}</div>;
   }
 
-  const tournamentState = propsTournamentState || localTournamentState;
   const isDisabled = currentRating !== undefined;
-  const votingQuestion = tournamentState?.votingQuestion || "How would you rate this entry?";
-
-  console.log("Voting question:", votingQuestion);
 
   return (
     <div className="space-y-4">
       <p className="text-lg font-medium text-gray-900">
-        {votingQuestion}
+        {question}
       </p>
       
       <div className="flex items-center space-x-4">

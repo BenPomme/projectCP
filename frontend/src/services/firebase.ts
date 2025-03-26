@@ -333,108 +333,113 @@ export const submitEntry = async ({ title, description, image, userId }: {
   }
 };
 
-// Tournament state functions
-export const getTournamentState = async (): Promise<TournamentState | null> => {
-  const docRef = doc(db, 'tournament', 'current');
-  const docSnap = await getDoc(docRef);
-  
-  if (!docSnap.exists()) {
-    // Initialize the tournament state if it doesn't exist
-    await initializeTournamentState();
-    // Get the newly created document
-    const newDocSnap = await getDoc(docRef);
-    if (!newDocSnap.exists()) {
-      return null;
-    }
-    const data = newDocSnap.data();
-    return {
-      id: newDocSnap.id,
-      ...data,
-      submissionPhaseStart: data.submissionPhaseStart?.toDate() || new Date(),
-      submissionPhaseEnd: data.submissionPhaseEnd?.toDate() || new Date(),
-      votingPhaseStart: data.votingPhaseStart?.toDate() || new Date(),
-      votingPhaseEnd: data.votingPhaseEnd?.toDate() || new Date(),
-      createdAt: data.createdAt?.toDate() || new Date(),
-      updatedAt: data.updatedAt?.toDate() || new Date(),
-      maxEntriesPerUser: data.maxEntriesPerUser || null,
-      maxVotesPerUser: data.maxVotesPerUser || null,
-      votingQuestion: data.votingQuestion || "How would you rate this entry?"
-    } as TournamentState;
-  }
-
-  const data = docSnap.data();
-  return {
-    id: docSnap.id,
-    ...data,
-    submissionPhaseStart: data.submissionPhaseStart?.toDate() || new Date(),
-    submissionPhaseEnd: data.submissionPhaseEnd?.toDate() || new Date(),
-    votingPhaseStart: data.votingPhaseStart?.toDate() || new Date(),
-    votingPhaseEnd: data.votingPhaseEnd?.toDate() || new Date(),
-    createdAt: data.createdAt?.toDate() || new Date(),
-    updatedAt: data.updatedAt?.toDate() || new Date(),
-    maxEntriesPerUser: data.maxEntriesPerUser || null,
-    maxVotesPerUser: data.maxVotesPerUser || null,
-    votingQuestion: data.votingQuestion || "How would you rate this entry?"
-  } as TournamentState;
+// Helper function to convert Firestore timestamp to Date
+const convertTimestampToDate = (timestamp: any): Date => {
+  if (!timestamp) return new Date();
+  if (timestamp instanceof Date) return timestamp;
+  if (timestamp?.toDate) return timestamp.toDate();
+  return new Date(timestamp);
 };
 
-export const updateTournamentState = async (state: Partial<TournamentState>): Promise<void> => {
-  const docRef = doc(db, 'tournament', 'current');
-  const docSnap = await getDoc(docRef);
-  
-  if (!docSnap.exists()) {
-    await initializeTournamentState();
+export const getTournamentState = async (): Promise<TournamentState | null> => {
+  try {
+    // First check the new location
+    const stateDoc = await getDoc(doc(db, 'tournament', 'state'));
+    console.log("Checking 'tournament/state' location:", stateDoc.exists());
+    
+    // If state doc doesn't exist, check the old location
+    if (!stateDoc.exists()) {
+      console.log("State not found in 'tournament/state', checking 'tournament/current'");
+      const currentDoc = await getDoc(doc(db, 'tournament', 'current'));
+      console.log("Found in 'tournament/current':", currentDoc.exists());
+      
+      // If found in old location, migrate it to new location
+      if (currentDoc.exists()) {
+        console.log("Migrating data from 'current' to 'state'");
+        const data = currentDoc.data();
+        await setDoc(doc(db, 'tournament', 'state'), data);
+        console.log("Migration complete");
+        
+        // Return the migrated data
+        const result = {
+          ...data,
+          submissionPhaseStart: convertTimestampToDate(data.submissionPhaseStart),
+          submissionPhaseEnd: convertTimestampToDate(data.submissionPhaseEnd),
+          votingPhaseStart: convertTimestampToDate(data.votingPhaseStart),
+          votingPhaseEnd: convertTimestampToDate(data.votingPhaseEnd),
+        };
+        
+        console.log("Processed migrated tournament state:", result);
+        console.log("Voting question after migration:", result.votingQuestion);
+        
+        return result;
+      }
+      
+      console.log("Tournament state not found in either location, returning null");
+      return null;
+    }
+    
+    const data = stateDoc.data() as TournamentState;
+    
+    // Convert Firestore timestamps to JS Dates
+    const result = {
+      ...data,
+      submissionPhaseStart: convertTimestampToDate(data.submissionPhaseStart),
+      submissionPhaseEnd: convertTimestampToDate(data.submissionPhaseEnd),
+      votingPhaseStart: convertTimestampToDate(data.votingPhaseStart),
+      votingPhaseEnd: convertTimestampToDate(data.votingPhaseEnd),
+    };
+    
+    console.log("Processed tournament state:", result);
+    console.log("Voting question from tournament state:", result.votingQuestion);
+    
+    return result;
+  } catch (error) {
+    console.error('Error getting tournament state:', error);
+    throw error;
   }
-  
-  // Convert Date objects to Timestamps
-  const updateData: any = {
-    ...state,
-    updatedAt: Timestamp.now()
-  };
+};
 
-  // Convert any Date objects to Timestamps
-  if (state.submissionPhaseStart instanceof Date) {
-    updateData.submissionPhaseStart = Timestamp.fromDate(state.submissionPhaseStart);
+export const updateTournamentState = async (updates: Partial<TournamentState>): Promise<void> => {
+  try {
+    console.log("Updating tournament state with:", updates);
+    console.log("Voting question being updated:", updates.votingQuestion);
+    
+    await setDoc(doc(db, 'tournament', 'state'), updates, { merge: true });
+    
+    console.log("Tournament state updated successfully");
+  } catch (error) {
+    console.error('Error updating tournament state:', error);
+    throw error;
   }
-  if (state.submissionPhaseEnd instanceof Date) {
-    updateData.submissionPhaseEnd = Timestamp.fromDate(state.submissionPhaseEnd);
-  }
-  if (state.votingPhaseStart instanceof Date) {
-    updateData.votingPhaseStart = Timestamp.fromDate(state.votingPhaseStart);
-  }
-  if (state.votingPhaseEnd instanceof Date) {
-    updateData.votingPhaseEnd = Timestamp.fromDate(state.votingPhaseEnd);
-  }
-
-  await updateDoc(docRef, updateData);
 };
 
 export const initializeTournamentState = async (): Promise<void> => {
-  console.log('Initializing tournament state');
-  
-  // Set default tournament state with current phase as submission
-  const now = new Date();
-  const submissionStart = now;
-  const submissionEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const votingStart = submissionEnd;
-  const votingEnd = new Date(votingStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-  
-  const defaultTournamentState = {
-    currentPhase: 'submission',
-    submissionPhaseStart: Timestamp.fromDate(submissionStart),
-    submissionPhaseEnd: Timestamp.fromDate(submissionEnd),
-    votingPhaseStart: Timestamp.fromDate(votingStart),
-    votingPhaseEnd: Timestamp.fromDate(votingEnd),
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-    // Default values for new settings
-    maxEntriesPerUser: null, // Unlimited by default
-    maxVotesPerUser: null, // Unlimited by default
-    votingQuestion: "How would you rate this entry?" // Default voting question
-  };
-  
-  console.log('Default tournament state:', defaultTournamentState);
-  
-  await setDoc(doc(db, 'tournament', 'current'), defaultTournamentState);
-  console.log('Tournament state initialized successfully');
+  try {
+    console.log("Initializing tournament state...");
+    
+    const now = new Date();
+    const submissionEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+    const votingEnd = new Date(submissionEnd.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days after submission
+    
+    const initialState: TournamentState = {
+      currentPhase: 'submission',
+      submissionPhaseStart: now,
+      submissionPhaseEnd: submissionEnd,
+      votingPhaseStart: submissionEnd,
+      votingPhaseEnd: votingEnd,
+      maxEntriesPerUser: null, // No limit initially
+      maxVotesPerUser: null, // No limit initially
+      votingQuestion: "How would you rate this entry?" // Default question
+    };
+    
+    console.log("Initial tournament state:", initialState);
+    
+    await setDoc(doc(db, 'tournament', 'state'), initialState);
+    
+    console.log("Tournament state initialized successfully");
+  } catch (error) {
+    console.error('Error initializing tournament state:', error);
+    throw error;
+  }
 }; 

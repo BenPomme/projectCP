@@ -18,6 +18,7 @@ export default function VotingPage() {
       
       const state = await getTournamentState();
       console.log("Tournament state:", state);
+      console.log("Voting question from tournament state:", state?.votingQuestion);
       setTournamentState(state);
       
       const entriesData = await getEntries();
@@ -136,7 +137,7 @@ export default function VotingPage() {
           </div>
         </div>
         <div className="mt-4 text-sm text-gray-500">
-          <p>Voting Question: <span className="font-medium">{tournamentState?.votingQuestion || "How would you rate this entry?"}</span></p>
+          <p>Voting Question: <span className="font-medium text-gray-900">{tournamentState?.votingQuestion || "How would you rate this entry?"}</span></p>
         </div>
       </div>
       
