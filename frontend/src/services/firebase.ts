@@ -192,18 +192,38 @@ export const deleteImage = async (path: string): Promise<void> => {
 export const getTournamentState = async (): Promise<TournamentState | null> => {
   const docRef = doc(db, 'tournament', 'current');
   const docSnap = await getDoc(docRef);
+  
   if (!docSnap.exists()) {
-    return null;
+    // Initialize the tournament state if it doesn't exist
+    await initializeTournamentState();
+    // Get the newly created document
+    const newDocSnap = await getDoc(docRef);
+    if (!newDocSnap.exists()) {
+      return null;
+    }
+    const data = newDocSnap.data();
+    return {
+      id: newDocSnap.id,
+      ...data,
+      submissionPhaseStart: data.submissionPhaseStart?.toDate() || new Date(),
+      submissionPhaseEnd: data.submissionPhaseEnd?.toDate() || new Date(),
+      votingPhaseStart: data.votingPhaseStart?.toDate() || new Date(),
+      votingPhaseEnd: data.votingPhaseEnd?.toDate() || new Date(),
+      createdAt: data.createdAt?.toDate() || new Date(),
+      updatedAt: data.updatedAt?.toDate() || new Date()
+    } as TournamentState;
   }
+
+  const data = docSnap.data();
   return {
     id: docSnap.id,
-    ...docSnap.data(),
-    submissionPhaseStart: docSnap.data().submissionPhaseStart.toDate(),
-    submissionPhaseEnd: docSnap.data().submissionPhaseEnd.toDate(),
-    votingPhaseStart: docSnap.data().votingPhaseStart.toDate(),
-    votingPhaseEnd: docSnap.data().votingPhaseEnd.toDate(),
-    createdAt: docSnap.data().createdAt.toDate(),
-    updatedAt: docSnap.data().updatedAt.toDate()
+    ...data,
+    submissionPhaseStart: data.submissionPhaseStart?.toDate() || new Date(),
+    submissionPhaseEnd: data.submissionPhaseEnd?.toDate() || new Date(),
+    votingPhaseStart: data.votingPhaseStart?.toDate() || new Date(),
+    votingPhaseEnd: data.votingPhaseEnd?.toDate() || new Date(),
+    createdAt: data.createdAt?.toDate() || new Date(),
+    updatedAt: data.updatedAt?.toDate() || new Date()
   } as TournamentState;
 };
 
@@ -215,10 +235,27 @@ export const updateTournamentState = async (state: Partial<TournamentState>): Pr
     await initializeTournamentState();
   }
   
-  await updateDoc(docRef, {
+  // Convert Date objects to Timestamps
+  const updateData: any = {
     ...state,
     updatedAt: Timestamp.now()
-  });
+  };
+
+  // Convert any Date objects to Timestamps
+  if (state.submissionPhaseStart instanceof Date) {
+    updateData.submissionPhaseStart = Timestamp.fromDate(state.submissionPhaseStart);
+  }
+  if (state.submissionPhaseEnd instanceof Date) {
+    updateData.submissionPhaseEnd = Timestamp.fromDate(state.submissionPhaseEnd);
+  }
+  if (state.votingPhaseStart instanceof Date) {
+    updateData.votingPhaseStart = Timestamp.fromDate(state.votingPhaseStart);
+  }
+  if (state.votingPhaseEnd instanceof Date) {
+    updateData.votingPhaseEnd = Timestamp.fromDate(state.votingPhaseEnd);
+  }
+
+  await updateDoc(docRef, updateData);
 };
 
 export const initializeTournamentState = async (): Promise<void> => {
