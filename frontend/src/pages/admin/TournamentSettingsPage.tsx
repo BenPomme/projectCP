@@ -536,7 +536,7 @@ export default function TournamentSettingsPage() {
               <h3 className="font-semibold text-lg text-gray-700">Users</h3>
               <p className="text-3xl font-bold">{stats.totalUsers}</p>
               <div className="mt-2 text-sm text-gray-500">
-                <div>Contributors: {new Set([...entries, ...votes].map(item => item.userId)).size}</div>
+                <div>Contributors: {stats.totalEntries > 0 || stats.totalVotes > 0 ? 'Various' : '0'}</div>
               </div>
             </div>
           </div>
