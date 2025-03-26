@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
-import { db } from '../config/firebase';
-import { Entry, TournamentState, getTournaments, initializeTournamentState } from '../services/firebase';
+import { Entry, TournamentState, getTournaments, initializeTournamentState, getEntriesForTournament } from '../services/firebase';
 import { formatDistanceToNow } from 'date-fns';
 import CreateTournamentForm from '../components/CreateTournamentForm';
 
@@ -13,37 +11,44 @@ export default function HomePage() {
   const [tournaments, setTournaments] = useState<TournamentState[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        setError(null);
         
         // Fetch tournaments
+        console.log("Fetching tournaments for HomePage...");
         const tournamentsData = await getTournaments();
         setTournaments(tournamentsData);
         
         // If no tournaments, create a default one
         if (tournamentsData.length === 0) {
+          console.log("No tournaments found, initializing default tournament...");
           await initializeTournamentState();
           const updatedTournaments = await getTournaments();
           setTournaments(updatedTournaments);
         }
 
-        // Fetch recent entries
-        const entriesQuery = query(
-          collection(db, 'entries'),
-          orderBy('createdAt', 'desc'),
-          limit(6)
-        );
-        const entriesSnapshot = await getDocs(entriesQuery);
-        const entriesData = entriesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Entry[];
-        setEntries(entriesData);
+        // Only fetch entries if we have tournaments
+        if (tournamentsData.length > 0) {
+          // Find a tournament in submission or voting phase to showcase entries from
+          const showcaseTournament = tournamentsData.find(t => 
+            t.currentPhase === 'submission' || t.currentPhase === 'voting'
+          );
+          
+          if (showcaseTournament) {
+            console.log(`Fetching recent entries for showcase tournament ${showcaseTournament.id}...`);
+            const entriesData = await getEntriesForTournament(showcaseTournament.id);
+            // Limit to 6 entries
+            setEntries(entriesData.slice(0, 6));
+          }
+        }
       } catch (error) {
         console.error('Error fetching data:', error);
+        setError('Failed to load tournaments. Please try refreshing the page.');
       } finally {
         setLoading(false);
       }
@@ -54,13 +59,39 @@ export default function HomePage() {
 
   // Get active tournaments (in submission or voting phase)
   const activeTournaments = tournaments.filter(t => 
-    t.currentPhase === 'submission' || t.currentPhase === 'completed'
+    t.currentPhase === 'submission' || t.currentPhase === 'voting' || t.currentPhase === 'completed'
   );
 
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          </div>
+        </div>
+        
+        <button 
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+          onClick={() => window.location.reload()}
+        >
+          Refresh Page
+        </button>
       </div>
     );
   }
@@ -187,14 +218,14 @@ export default function HomePage() {
                     
                     {tournament.currentPhase === 'completed' && (
                       <Link
-                        to={`/tournament/${tournament.id}/winners`}
+                        to={`/tournament/${tournament.id}/results`}
                         className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
                       >
                         View Results
                       </Link>
                     )}
                     
-                    {tournament.ownerId === user?.id && (
+                    {(tournament.ownerId === user?.id || user?.isAdmin) && (
                       <Link
                         to={`/admin/tournament/${tournament.id}/settings`}
                         className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
@@ -220,11 +251,13 @@ export default function HomePage() {
                 key={entry.id}
                 className="bg-white overflow-hidden shadow rounded-lg"
               >
-                <img
-                  src={entry.imageUrl}
-                  alt={entry.title}
-                  className="w-full h-48 object-cover"
-                />
+                {entry.imageUrl && (
+                  <img
+                    src={entry.imageUrl}
+                    alt={entry.title}
+                    className="w-full h-48 object-cover"
+                  />
+                )}
                 <div className="px-4 py-5 sm:p-6">
                   <h3 className="text-lg font-medium text-gray-900">
                     {entry.title}
@@ -236,10 +269,15 @@ export default function HomePage() {
                   )}
                   <div className="mt-4 flex items-center justify-between">
                     <div className="text-sm text-gray-500">
-                      {entry.voteCount} votes
+                      {entry.voteCount || 0} votes
                     </div>
                     <div className="text-sm text-gray-500">
-                      Submitted {formatDistanceToNow(entry.createdAt.toDate(), { addSuffix: true })}
+                      Submitted {formatDistanceToNow(
+                        entry.createdAt instanceof Date 
+                          ? entry.createdAt 
+                          : entry.createdAt.toDate(), 
+                        { addSuffix: true }
+                      )}
                     </div>
                   </div>
                 </div>

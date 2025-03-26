@@ -132,16 +132,24 @@ export const getEntry = async (id: string): Promise<Entry | null> => {
 
 // Get all entries for a specific tournament
 export const getEntriesForTournament = async (tournamentId: string): Promise<Entry[]> => {
-  const entriesQuery = query(
-    collection(db, 'entries'),
-    where('tournamentId', '==', tournamentId),
-    orderBy('createdAt', 'desc')
-  );
-  const querySnapshot = await getDocs(entriesQuery);
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }) as Entry);
+  try {
+    console.log(`Fetching entries for tournament ${tournamentId}...`);
+    const entriesQuery = query(
+      collection(db, 'entries'),
+      where('tournamentId', '==', tournamentId),
+      orderBy('createdAt', 'desc')
+    );
+    const querySnapshot = await getDocs(entriesQuery);
+    const entries = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }) as Entry);
+    console.log(`Found ${entries.length} entries for tournament ${tournamentId}`);
+    return entries;
+  } catch (error) {
+    console.error(`Error getting entries for tournament ${tournamentId}:`, error);
+    return [];
+  }
 };
 
 // Get all entries (for backward compatibility)
@@ -157,7 +165,8 @@ export const getEntries = async (tournamentId?: string): Promise<Entry[]> => {
       return getEntriesForTournament(activeTournament.id);
     }
     
-    // Fallback to all entries
+    console.warn('No tournamentId provided and no active tournament found - returning all entries. This is deprecated behavior.');
+    // Fallback to all entries - this should be avoided
     const entriesQuery = query(collection(db, 'entries'), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(entriesQuery);
     return querySnapshot.docs.map(doc => ({
@@ -172,17 +181,33 @@ export const getEntries = async (tournamentId?: string): Promise<Entry[]> => {
 
 // Get entries submitted by a specific user for a specific tournament
 export const getUserEntriesForTournament = async (userId: string, tournamentId: string): Promise<Entry[]> => {
-  const entriesQuery = query(
-    collection(db, 'entries'),
-    where('userId', '==', userId),
-    where('tournamentId', '==', tournamentId),
-    orderBy('createdAt', 'desc')
-  );
-  const querySnapshot = await getDocs(entriesQuery);
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }) as Entry);
+  try {
+    console.log(`Fetching entries for user ${userId} in tournament ${tournamentId}...`);
+    // Using a simple query without complex conditions to avoid index issues
+    const entriesQuery = query(
+      collection(db, 'entries'),
+      where('userId', '==', userId)
+    );
+    const querySnapshot = await getDocs(entriesQuery);
+    
+    // Filter by tournamentId client-side
+    const entries = querySnapshot.docs
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }) as Entry)
+      .filter(entry => entry.tournamentId === tournamentId);
+      
+    console.log(`Found ${entries.length} entries for user ${userId} in tournament ${tournamentId}`);
+    
+    // Sort by creation date on client side
+    entries.sort((a, b) => b.createdAt.toDate().getTime() - a.createdAt.toDate().getTime());
+    
+    return entries;
+  } catch (error) {
+    console.error(`Error getting entries for user ${userId} in tournament ${tournamentId}:`, error);
+    return [];
+  }
 };
 
 // Get all entries submitted by a specific user
@@ -327,33 +352,46 @@ export const getVotes = async (userId: string): Promise<Record<string, number>> 
 
 // Get votes for a specific tournament
 export const getTournamentVotes = async (tournamentId: string): Promise<Vote[]> => {
-  const votesQuery = query(
-    collection(db, 'votes'),
-    where('tournamentId', '==', tournamentId)
-  );
-  const querySnapshot = await getDocs(votesQuery);
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  })) as Vote[];
+  try {
+    console.log(`Fetching votes for tournament ${tournamentId}...`);
+    const votesQuery = query(
+      collection(db, 'votes'),
+      where('tournamentId', '==', tournamentId)
+    );
+    const querySnapshot = await getDocs(votesQuery);
+    const votes = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Vote[];
+    console.log(`Found ${votes.length} votes for tournament ${tournamentId}`);
+    return votes;
+  } catch (error) {
+    console.error(`Error getting votes for tournament ${tournamentId}:`, error);
+    return [];
+  }
 };
 
 // Get votes by a user for a specific tournament
 export const getUserVotesForTournament = async (userId: string, tournamentId: string): Promise<Record<string, number>> => {
   try {
+    console.log(`Fetching votes for user ${userId} in tournament ${tournamentId}...`);
+    // Using a simple query with just userId to avoid index issues
     const votesQuery = query(
       collection(db, 'votes'),
-      where('userId', '==', userId),
-      where('tournamentId', '==', tournamentId)
+      where('userId', '==', userId)
     );
     const querySnapshot = await getDocs(votesQuery);
     
     const votesMap: Record<string, number> = {};
     querySnapshot.docs.forEach(doc => {
       const data = doc.data();
-      votesMap[data.entryId] = data.rating;
+      // Filter by tournamentId client-side
+      if (data.tournamentId === tournamentId) {
+        votesMap[data.entryId] = data.rating;
+      }
     });
     
+    console.log(`Found ${Object.keys(votesMap).length} votes for user ${userId} in tournament ${tournamentId}`);
     return votesMap;
   } catch (error) {
     console.error(`Error getting votes for user ${userId} in tournament ${tournamentId}:`, error);
@@ -452,6 +490,7 @@ const convertTimestampToDate = (timestamp: any): Date => {
 export const getTournaments = async (): Promise<TournamentState[]> => {
   try {
     console.log("Fetching all tournaments...");
+    // Simple query without ordering or filtering that doesn't require a composite index
     const tournamentsSnapshot = await getDocs(collection(db, 'tournaments'));
     
     const tournaments = tournamentsSnapshot.docs.map(doc => {
@@ -468,11 +507,14 @@ export const getTournaments = async (): Promise<TournamentState[]> => {
       } as TournamentState;
     });
     
+    // Sort on client side instead of using orderBy in the query
+    tournaments.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    
     console.log(`Found ${tournaments.length} tournaments`);
     return tournaments;
   } catch (error) {
     console.error('Error getting tournaments:', error);
-    throw error;
+    return []; // Return empty array instead of throwing error for a more graceful failure
   }
 };
 
@@ -501,11 +543,14 @@ export const getUserTournaments = async (userId: string): Promise<TournamentStat
       } as TournamentState;
     });
     
+    // Sort on client side
+    tournaments.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    
     console.log(`Found ${tournaments.length} tournaments for user ${userId}`);
     return tournaments;
   } catch (error) {
     console.error(`Error getting tournaments for user ${userId}:`, error);
-    throw error;
+    return []; // Return empty array instead of throwing
   }
 };
 
@@ -543,28 +588,18 @@ export const getTournamentById = async (tournamentId: string): Promise<Tournamen
 // Get the current active tournament (for backward compatibility)
 export const getTournamentState = async (): Promise<TournamentState | null> => {
   try {
-    // First check for any tournaments that are in the submission or voting phase
-    const tournamentsQuery = query(
-      collection(db, 'tournaments'),
-      where('currentPhase', 'in', ['submission', 'voting']),
-      orderBy('createdAt', 'desc'),
-      limit(1)
+    // First get all tournaments
+    const tournaments = await getTournaments();
+    
+    // Filter and find active tournaments client-side instead of using complex queries
+    const activeTournaments = tournaments.filter(
+      t => t.currentPhase === 'submission' || t.currentPhase === 'voting'
     );
     
-    const tournamentsSnapshot = await getDocs(tournamentsQuery);
-    
-    if (!tournamentsSnapshot.empty) {
-      const data = tournamentsSnapshot.docs[0].data();
-      return {
-        ...data,
-        id: tournamentsSnapshot.docs[0].id,
-        submissionPhaseStart: convertTimestampToDate(data.submissionPhaseStart),
-        submissionPhaseEnd: convertTimestampToDate(data.submissionPhaseEnd),
-        votingPhaseStart: convertTimestampToDate(data.votingPhaseStart),
-        votingPhaseEnd: convertTimestampToDate(data.votingPhaseEnd),
-        createdAt: convertTimestampToDate(data.createdAt),
-        updatedAt: convertTimestampToDate(data.updatedAt),
-      } as TournamentState;
+    if (activeTournaments.length > 0) {
+      // Sort by most recently created first
+      activeTournaments.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      return activeTournaments[0];
     }
     
     // For backward compatibility, check the old location
