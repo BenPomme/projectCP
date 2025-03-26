@@ -698,6 +698,14 @@ export const createTournament = async (
     
     const docRef = await addDoc(collection(db, 'tournaments'), tournamentData);
     
+    // Make the user an admin by updating their document
+    await updateDoc(doc(db, 'users', ownerId), {
+      isAdmin: true,
+      updatedAt: now
+    });
+    
+    console.log(`User ${ownerId} has been granted admin rights as tournament creator`);
+    
     return {
       ...tournamentData,
       id: docRef.id
