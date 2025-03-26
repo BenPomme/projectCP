@@ -151,6 +151,20 @@ export default function TournamentSettingsPage() {
     }
   };
 
+  const handleEntryLimitChange = async (value: string) => {
+    const maxEntries = value === '' ? null : parseInt(value);
+    await updateTournamentState({ maxEntriesPerUser: maxEntries });
+  };
+
+  const handleVoteLimitChange = async (value: string) => {
+    const maxVotes = value === '' ? null : parseInt(value);
+    await updateTournamentState({ maxVotesPerUser: maxVotes });
+  };
+
+  const handleVotingQuestionChange = async (value: string) => {
+    await updateTournamentState({ votingQuestion: value });
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -160,22 +174,12 @@ export default function TournamentSettingsPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="bg-white shadow rounded-lg p-6 mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Tournament Settings</h1>
-
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 rounded-md">
-            <p className="text-sm text-red-700">{error}</p>
-          </div>
-        )}
-
-        {success && (
-          <div className="mb-4 p-4 bg-green-50 rounded-md">
-            <p className="text-sm text-green-700">{success}</p>
-          </div>
-        )}
-
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-8">Tournament Settings</h1>
+      
+      {/* Existing phase controls */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">Phase Management</h2>
         <div className="space-y-8">
           <div>
             <h2 className="text-lg font-medium text-gray-900 mb-4">Current Phase</h2>
@@ -272,6 +276,65 @@ export default function TournamentSettingsPage() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* New settings section */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">Entry & Voting Limits</h2>
+        
+        {/* Entry Limit */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Maximum Entries per User
+          </label>
+          <div className="flex items-center space-x-2">
+            <input
+              type="number"
+              min="1"
+              value={tournamentState?.maxEntriesPerUser || ''}
+              onChange={(e) => handleEntryLimitChange(e.target.value)}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              placeholder="Leave empty for unlimited"
+            />
+            <span className="text-sm text-gray-500">
+              {tournamentState?.maxEntriesPerUser === null ? 'Unlimited' : 'entries'}
+            </span>
+          </div>
+        </div>
+
+        {/* Vote Limit */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Maximum Votes per User
+          </label>
+          <div className="flex items-center space-x-2">
+            <input
+              type="number"
+              min="1"
+              value={tournamentState?.maxVotesPerUser || ''}
+              onChange={(e) => handleVoteLimitChange(e.target.value)}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              placeholder="Leave empty for unlimited"
+            />
+            <span className="text-sm text-gray-500">
+              {tournamentState?.maxVotesPerUser === null ? 'Unlimited' : 'votes'}
+            </span>
+          </div>
+        </div>
+
+        {/* Voting Question */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Voting Question
+          </label>
+          <input
+            type="text"
+            value={tournamentState?.votingQuestion || ''}
+            onChange={(e) => handleVotingQuestionChange(e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            placeholder="Enter the question to display above the voting scale"
+          />
         </div>
       </div>
 

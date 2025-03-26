@@ -1,0 +1,14 @@
+export interface TournamentState {
+  id: string;
+  currentPhase: 'submission' | 'voting' | 'completed';
+  submissionPhaseStart: Date;
+  submissionPhaseEnd: Date;
+  votingPhaseStart: Date;
+  votingPhaseEnd: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  // New settings
+  maxEntriesPerUser: number | null; // null means unlimited
+  maxVotesPerUser: number | null; // null means unlimited
+  votingQuestion: string; // Question to display above the voting scale
+} 

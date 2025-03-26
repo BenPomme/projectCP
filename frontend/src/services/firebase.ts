@@ -273,6 +273,10 @@ export const initializeTournamentState = async (): Promise<void> => {
     votingPhaseStart: Timestamp.fromDate(votingStart),
     votingPhaseEnd: Timestamp.fromDate(votingEnd),
     createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now()
+    updatedAt: Timestamp.now(),
+    // Default values for new settings
+    maxEntriesPerUser: null, // Unlimited by default
+    maxVotesPerUser: null, // Unlimited by default
+    votingQuestion: "How would you rate this entry?" // Default voting question
   });
 }; 
