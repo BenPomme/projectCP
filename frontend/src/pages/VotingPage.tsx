@@ -72,15 +72,30 @@ export default function VotingPage() {
       }
 
       console.log(`Submitting vote: Entry ID ${entryId}, Rating ${rating}`);
-      await submitVote(entryId, rating);
+      setLoading(true);
       
-      // Update local state temporarily
-      setUserVotes(prev => ({ ...prev, [entryId]: rating }));
-      
-      // Refresh the data to get updated vote counts
-      await fetchData();
-      
-      setError(null);
+      try {
+        await submitVote(entryId, rating);
+        console.log('Vote submitted successfully');
+        
+        // Update local state temporarily
+        setUserVotes(prev => {
+          const newVotes = { ...prev, [entryId]: rating };
+          console.log('Updated user votes:', newVotes);
+          return newVotes;
+        });
+        
+        // Reload data
+        console.log('Reloading data after vote...');
+        await fetchData();
+        
+        setError(null);
+      } catch (voteError) {
+        console.error('Error during vote submission:', voteError);
+        setError(`Failed to submit vote: ${voteError.message}`);
+      } finally {
+        setLoading(false);
+      }
     } catch (err) {
       setError('Failed to submit vote');
       console.error('Error submitting vote:', err);

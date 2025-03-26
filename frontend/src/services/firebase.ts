@@ -155,51 +155,78 @@ export const deleteEntry = async (id: string) => {
 export const createVote = async (vote: Omit<Vote, 'id' | 'createdAt'>) => {
   console.log('Creating vote with data:', vote);
   
-  const newVote = {
-    ...vote,
-    createdAt: Timestamp.now()
-  };
-  
-  // Get entry to update
-  const entryRef = doc(db, 'entries', vote.entryId);
-  const entrySnap = await getDoc(entryRef);
-  
-  if (!entrySnap.exists()) {
-    console.error('Entry not found:', vote.entryId);
-    throw new Error('Entry does not exist');
-  }
-  
-  const entryData = entrySnap.data();
-  console.log('Entry before update:', entryData);
-  
-  // Calculate new rating
-  const currentVoteCount = entryData.voteCount || 0;
-  const currentTotalPoints = (entryData.averageRating || 0) * currentVoteCount;
-  const newVoteCount = currentVoteCount + 1;
-  const newTotalPoints = currentTotalPoints + vote.rating;
-  const newAverageRating = newTotalPoints / newVoteCount;
-  
-  console.log('Vote calculation:', {
-    currentVoteCount,
-    currentTotalPoints,
-    newVoteCount,
-    newTotalPoints,
-    newAverageRating,
-    newRating: vote.rating
-  });
+  try {
+    // First, check if a vote already exists
+    const votesQuery = query(
+      collection(db, 'votes'),
+      where('userId', '==', vote.userId),
+      where('entryId', '==', vote.entryId)
+    );
+    
+    const existingVotes = await getDocs(votesQuery);
+    if (!existingVotes.empty) {
+      console.log('User already voted for this entry');
+      throw new Error('You have already voted for this entry');
+    }
+    
+    const newVote = {
+      ...vote,
+      createdAt: Timestamp.now()
+    };
+    
+    // Get entry to update
+    const entryRef = doc(db, 'entries', vote.entryId);
+    const entrySnap = await getDoc(entryRef);
+    
+    if (!entrySnap.exists()) {
+      console.error('Entry not found:', vote.entryId);
+      throw new Error('Entry does not exist');
+    }
+    
+    const entryData = entrySnap.data();
+    console.log('Entry before update:', JSON.stringify(entryData, null, 2));
+    
+    // Calculate new rating
+    const currentVoteCount = entryData.voteCount || 0;
+    const currentTotalPoints = (entryData.averageRating || 0) * currentVoteCount;
+    const newVoteCount = currentVoteCount + 1;
+    const newTotalPoints = currentTotalPoints + vote.rating;
+    const newAverageRating = newTotalPoints / newVoteCount;
+    
+    console.log('Vote calculation:', {
+      currentVoteCount,
+      currentTotalPoints,
+      newVoteCount,
+      newTotalPoints,
+      newAverageRating,
+      newRating: vote.rating
+    });
 
-  // First add the vote
-  const docRef = await addDoc(collection(db, 'votes'), newVote);
-  
-  // Then update the entry with new vote count and average
-  await updateDoc(entryRef, {
-    voteCount: newVoteCount,
-    averageRating: newAverageRating
-  });
-  
-  console.log('Entry updated with new vote stats');
-  
-  return { id: docRef.id, ...newVote };
+    // First add the vote
+    const docRef = await addDoc(collection(db, 'votes'), newVote);
+    
+    // Then update the entry with new vote count and average
+    const updateData = {
+      voteCount: newVoteCount,
+      averageRating: newAverageRating,
+      updatedAt: Timestamp.now()
+    };
+    
+    await updateDoc(entryRef, updateData);
+    
+    console.log('Entry updated with new vote stats:', updateData);
+    
+    // Verify the update worked by getting the entry again
+    const updatedEntrySnap = await getDoc(entryRef);
+    if (updatedEntrySnap.exists()) {
+      console.log('Updated entry data:', JSON.stringify(updatedEntrySnap.data(), null, 2));
+    }
+    
+    return { id: docRef.id, ...newVote };
+  } catch (error) {
+    console.error('Error in createVote:', error);
+    throw error;
+  }
 };
 
 export const getVotesForEntry = async (entryId: string): Promise<Vote[]> => {
@@ -243,16 +270,16 @@ export const submitVote = async (entryId: string, rating: number): Promise<void>
       throw new Error('You must be logged in to vote');
     }
 
-    console.log(`Creating vote for entry ${entryId} with rating ${rating}`);
+    console.log(`Submitting vote for entry ${entryId} with rating ${rating}`);
     
     // Create the vote
-    await createVote({
+    const voteResult = await createVote({
       userId: user.uid,
       entryId,
       rating
     });
     
-    console.log(`Vote created successfully for entry ${entryId}`);
+    console.log(`Vote created successfully for entry ${entryId}:`, voteResult);
     
   } catch (error) {
     console.error('Error submitting vote:', error);

@@ -44,21 +44,28 @@ export default function WinnersPage() {
       setLoading(true);
       setError(null);
       
+      console.log('Fetching winners...');
+      
       // Query for entries with highest average ratings
       const entriesQuery = query(
         collection(db, 'entries'),
-        where('status', '==', 'approved'),
+        // Don't filter by status to see all entries
         orderBy('averageRating', 'desc'),
         orderBy('voteCount', 'desc'),
         limit(10)
       );
       
       const entriesSnapshot = await getDocs(entriesQuery);
-      const entriesData = entriesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Entry[];
+      const entriesData = entriesSnapshot.docs.map(doc => {
+        const data = doc.data();
+        console.log(`Entry ${doc.id}:`, data);
+        return {
+          id: doc.id,
+          ...data
+        };
+      }) as Entry[];
       
+      console.log('Winners data:', entriesData);
       setWinners(entriesData);
     } catch (err: any) {
       console.error('Error fetching winners:', err);
