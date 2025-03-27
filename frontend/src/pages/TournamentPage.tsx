@@ -39,11 +39,11 @@ export default function TournamentPage() {
         // Check if this tournament is password protected
         if (data.isPasswordProtected) {
           console.log('Tournament is password protected');
-          // If user is the owner or an admin, they can bypass the password
-          const isOwnerOrAdmin = user?.id === data.ownerId || user?.isAdmin === true;
-          console.log('Is user owner or admin?', isOwnerOrAdmin);
+          // If user is the owner, they can bypass the password
+          const isOwner = user?.id === data.ownerId;
+          console.log('Is user owner?', isOwner);
           
-          if (!isOwnerOrAdmin) {
+          if (!isOwner) {
             // Check if this user has already entered the password for this tournament
             const hasAccess = localStorage.getItem(`tournament_access_${actualTournamentId}_${user?.id}`);
             console.log('Has access from localStorage?', !!hasAccess);

@@ -62,11 +62,11 @@ export default function SubmitDesignPage() {
         // Check if tournament is password protected
         if (tournamentData.isPasswordProtected) {
           console.log('Tournament is password protected');
-          // Check if user is the owner or an admin (they bypass password protection)
-          const isOwnerOrAdmin = user?.id === tournamentData.ownerId || user?.isAdmin === true;
-          console.log('Is user owner or admin?', isOwnerOrAdmin);
+          // Check if user is the owner (they bypass password protection)
+          const isOwner = user?.id === tournamentData.ownerId;
+          console.log('Is user owner?', isOwner);
           
-          if (!isOwnerOrAdmin) {
+          if (!isOwner) {
             // Check if user has already provided the password for this tournament
             const hasAccess = localStorage.getItem(`tournament_access_${actualTournamentId}_${user?.id}`);
             console.log('Has access from localStorage?', !!hasAccess);
