@@ -38,42 +38,45 @@ export default function HomePage() {
           
           const entries = await getApprovedEntriesForTournament(showcaseTournament.id);
           
-          // Sort by creation date descending and take the first 3
-          const safelyGetTime = (date: any) => {
-            try {
-              if (!date) return 0;
-              
-              if (date instanceof Date) return date.getTime();
-              
-              if (typeof date === 'object' && date !== null) {
-                // Try to convert from Firestore Timestamp if it has toDate
-                if (typeof date.toDate === 'function') {
-                  return date.toDate().getTime();
-                }
-                
-                // Try to convert from a date-like object
-                return new Date(date).getTime();
-              }
-              
-              if (typeof date === 'number') return date;
-              
-              // Try to parse string dates
-              if (typeof date === 'string') {
-                return new Date(date).getTime();
-              }
-              
-              return 0;
-            } catch (err) {
-              console.error("Error converting date format:", err);
-              return 0;
-            }
-          };
-          
-          // Use safe sort with fallbacks for any date format
+          // Use a safe approach to sort entries by date without relying on specific methods
           const recentEntries = entries
             .sort((a, b) => {
-              const timeA = safelyGetTime(a.createdAt);
-              const timeB = safelyGetTime(b.createdAt);
+              // Get timestamps safely, handling any date format
+              let timeA = 0;
+              let timeB = 0;
+              
+              try {
+                if (a.createdAt) {
+                  if (typeof a.createdAt.getTime === 'function') {
+                    timeA = a.createdAt.getTime();
+                  } else if (typeof a.createdAt.toMillis === 'function') {
+                    timeA = a.createdAt.toMillis();
+                  } else if (typeof a.createdAt.toDate === 'function') {
+                    timeA = a.createdAt.toDate().getTime();
+                  } else if (typeof a.createdAt === 'number') {
+                    timeA = a.createdAt;
+                  } else {
+                    timeA = new Date(a.createdAt).getTime();
+                  }
+                }
+                
+                if (b.createdAt) {
+                  if (typeof b.createdAt.getTime === 'function') {
+                    timeB = b.createdAt.getTime();
+                  } else if (typeof b.createdAt.toMillis === 'function') {
+                    timeB = b.createdAt.toMillis();
+                  } else if (typeof b.createdAt.toDate === 'function') {
+                    timeB = b.createdAt.toDate().getTime();
+                  } else if (typeof b.createdAt === 'number') {
+                    timeB = b.createdAt;
+                  } else {
+                    timeB = new Date(b.createdAt).getTime();
+                  }
+                }
+              } catch (err) {
+                console.error("Error comparing dates:", err);
+              }
+              
               return timeB - timeA;
             })
             .slice(0, 3);
