@@ -38,9 +38,28 @@ export default function HomePage() {
           
           const entries = await getApprovedEntriesForTournament(showcaseTournament.id);
           
-          // Skip sorting altogether and just take the first 3 entries
-          // This avoids any potential issues with date formats
-          const recentEntries = entries.slice(0, 3);
+          // Sort by creation date descending and take the first 3
+          const recentEntries = entries
+            .sort((a, b) => {
+              // Handle different date formats safely
+              if (a.createdAt && b.createdAt) {
+                // If createdAt is a Firestore timestamp with toMillis method
+                if (typeof a.createdAt.toMillis === 'function' && typeof b.createdAt.toMillis === 'function') {
+                  return b.createdAt.toMillis() - a.createdAt.toMillis();
+                }
+                // If createdAt is a Date object
+                if (a.createdAt instanceof Date && b.createdAt instanceof Date) {
+                  return b.createdAt.getTime() - a.createdAt.getTime();
+                }
+                // If createdAt is a timestamp number
+                if (typeof a.createdAt === 'number' && typeof b.createdAt === 'number') {
+                  return b.createdAt - a.createdAt;
+                }
+              }
+              // Fallback: assume newer entries are at the beginning
+              return 0;
+            })
+            .slice(0, 3);
             
           setShowcaseEntries(recentEntries);
         }
