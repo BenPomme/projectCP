@@ -32,7 +32,7 @@ jobs:
             - Updated all entry retrieval functions to use safelyConvertToDate helper
             - Simplified date handling in HomePage component
           branch: main
-          delete-branch: true
+          delete-branch: false
           labels: |
             bug
             enhancement
@@ -45,5 +45,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           MERGE_LABELS: ""
           MERGE_METHOD: "squash"
-          MERGE_DELETE_BRANCH: "true"
+          MERGE_DELETE_BRANCH: "false"
           MERGE_COMMIT_MESSAGE: "Merge fix/date-handling into main" 
