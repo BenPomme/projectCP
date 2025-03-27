@@ -64,6 +64,9 @@ function App() {
   useEffect(() => {
     // Handle the redirect result from Google sign-in
     handleRedirectResult();
+    
+    // Set document title
+    document.title = 'King Ideation Platform';
   }, []);
 
   return (

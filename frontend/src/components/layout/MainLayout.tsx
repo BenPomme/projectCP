@@ -3,6 +3,7 @@ import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { Disclosure, Menu, Transition } from '@headlessui/react';
 import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../store/authStore';
+import KingLogo from '../../assets/Kinglogo.png';
 
 const navigation = [
   { name: 'Home', href: '/', public: true },
@@ -37,8 +38,11 @@ export default function MainLayout() {
               <div className="flex h-16 justify-between">
                 <div className="flex">
                   <div className="flex flex-shrink-0 items-center">
-                    <Link to="/" className="text-xl font-bold text-primary-600">
-                      KING Competition
+                    <Link to="/" className="flex items-center">
+                      <img src={KingLogo} alt="King Logo" className="h-8 w-auto mr-2" />
+                      <span className="text-xl font-bold text-primary-600">
+                        King Ideation Platform
+                      </span>
                     </Link>
                   </div>
                   <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
