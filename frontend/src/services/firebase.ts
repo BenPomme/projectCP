@@ -925,6 +925,43 @@ export const checkTournamentPassword = async (
   }
 };
 
+// Helper function to convert any timestamp format to Date safely
+const safelyConvertToDate = (timestamp: any): Date => {
+  try {
+    if (!timestamp) return new Date();
+    
+    if (timestamp instanceof Date) return timestamp;
+    
+    if (typeof timestamp === 'object') {
+      // Check for Firestore Timestamp methods
+      if (typeof timestamp.toDate === 'function') {
+        return timestamp.toDate();
+      }
+      
+      // Some Firestore timestamps might have toMillis instead
+      if (typeof timestamp.toMillis === 'function') {
+        return new Date(timestamp.toMillis());
+      }
+      
+      // Try to create a date from the object
+      return new Date(timestamp);
+    }
+    
+    if (typeof timestamp === 'number') {
+      return new Date(timestamp);
+    }
+    
+    if (typeof timestamp === 'string') {
+      return new Date(timestamp);
+    }
+    
+    return new Date();
+  } catch (err) {
+    console.error("Error converting timestamp to Date:", err);
+    return new Date();
+  }
+};
+
 // Get only approved entries for a specific tournament
 export async function getApprovedEntriesForTournament(tournamentId: string): Promise<TournamentEntry[]> {
   try {
@@ -942,8 +979,9 @@ export async function getApprovedEntriesForTournament(tournamentId: string): Pro
       return {
         id: doc.id,
         ...data,
-        createdAt: convertTimestampToDate(data.createdAt),
-        updatedAt: convertTimestampToDate(data.updatedAt),
+        // Use our safer conversion functions
+        createdAt: safelyConvertToDate(data.createdAt),
+        updatedAt: safelyConvertToDate(data.updatedAt),
       } as TournamentEntry;
     });
     
@@ -964,21 +1002,17 @@ export async function getAllTournaments(): Promise<TournamentState[]> {
     
     const tournaments = tournamentsSnapshot.docs.map((doc) => {
       const data = doc.data();
-      // Create a safe version of data with properly converted dates
-      const safeData = {
-        ...data,
-        createdAt: convertTimestampToDate(data.createdAt),
-        updatedAt: convertTimestampToDate(data.updatedAt),
-        submissionPhaseStart: convertTimestampToDate(data.submissionPhaseStart),
-        submissionPhaseEnd: convertTimestampToDate(data.submissionPhaseEnd),
-        votingPhaseStart: convertTimestampToDate(data.votingPhaseStart),
-        votingPhaseEnd: convertTimestampToDate(data.votingPhaseEnd),
-      };
       
-      // Make sure to remove any toMillis functions if they exist and are not valid
+      // Create safer date conversions
       return {
         id: doc.id,
-        ...safeData
+        ...data,
+        createdAt: safelyConvertToDate(data.createdAt),
+        updatedAt: safelyConvertToDate(data.updatedAt),
+        submissionPhaseStart: safelyConvertToDate(data.submissionPhaseStart),
+        submissionPhaseEnd: safelyConvertToDate(data.submissionPhaseEnd),
+        votingPhaseStart: safelyConvertToDate(data.votingPhaseStart),
+        votingPhaseEnd: safelyConvertToDate(data.votingPhaseEnd),
       } as TournamentState;
     });
     

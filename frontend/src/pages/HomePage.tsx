@@ -38,47 +38,47 @@ export default function HomePage() {
           
           const entries = await getApprovedEntriesForTournament(showcaseTournament.id);
           
-          // Use a safe approach to sort entries by date without relying on specific methods
-          const recentEntries = entries
-            .sort((a, b) => {
-              // Get timestamps safely, handling any date format
-              let timeA = 0;
-              let timeB = 0;
-              
-              try {
-                if (a.createdAt) {
-                  if (typeof a.createdAt.getTime === 'function') {
-                    timeA = a.createdAt.getTime();
-                  } else if (typeof a.createdAt.toMillis === 'function') {
-                    timeA = a.createdAt.toMillis();
-                  } else if (typeof a.createdAt.toDate === 'function') {
-                    timeA = a.createdAt.toDate().getTime();
-                  } else if (typeof a.createdAt === 'number') {
-                    timeA = a.createdAt;
-                  } else {
-                    timeA = new Date(a.createdAt).getTime();
-                  }
+          // Force conversion of all entries to a safe format before sorting
+          const entriesWithSafeDates = entries.map(entry => {
+            let safeCreatedAt;
+            try {
+              // Convert any date format to timestamp
+              if (entry.createdAt) {
+                if (typeof entry.createdAt.getTime === 'function') {
+                  // It's a JavaScript Date
+                  safeCreatedAt = entry.createdAt.getTime();
+                } else if (typeof entry.createdAt.toMillis === 'function') {
+                  // It's a Firestore Timestamp
+                  safeCreatedAt = entry.createdAt.toMillis();
+                } else if (typeof entry.createdAt.toDate === 'function') {
+                  // It's a Firestore Timestamp with toDate
+                  safeCreatedAt = entry.createdAt.toDate().getTime();
+                } else if (typeof entry.createdAt === 'number') {
+                  // It's a numeric timestamp
+                  safeCreatedAt = entry.createdAt;
+                } else {
+                  // Try to parse as date string or any other format
+                  safeCreatedAt = new Date(entry.createdAt).getTime();
                 }
-                
-                if (b.createdAt) {
-                  if (typeof b.createdAt.getTime === 'function') {
-                    timeB = b.createdAt.getTime();
-                  } else if (typeof b.createdAt.toMillis === 'function') {
-                    timeB = b.createdAt.toMillis();
-                  } else if (typeof b.createdAt.toDate === 'function') {
-                    timeB = b.createdAt.toDate().getTime();
-                  } else if (typeof b.createdAt === 'number') {
-                    timeB = b.createdAt;
-                  } else {
-                    timeB = new Date(b.createdAt).getTime();
-                  }
-                }
-              } catch (err) {
-                console.error("Error comparing dates:", err);
+              } else {
+                safeCreatedAt = 0;
               }
-              
-              return timeB - timeA;
-            })
+            } catch (err) {
+              console.error("Error processing date:", err);
+              safeCreatedAt = 0;
+            }
+            
+            // Return a new object with the safe date
+            return {
+              ...entry,
+              // Keep original for display but add a safe numeric timestamp for sorting
+              _safeSortTimestamp: safeCreatedAt 
+            };
+          });
+          
+          // Sort using the safe timestamp values
+          const recentEntries = entriesWithSafeDates
+            .sort((a, b) => b._safeSortTimestamp - a._safeSortTimestamp)
             .slice(0, 3);
             
           setShowcaseEntries(recentEntries);
