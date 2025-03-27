@@ -22,11 +22,12 @@ export default function HomePage() {
 
   useEffect(() => {
     const fetchTournaments = async () => {
-      console.log('Fetching tournaments for HomePage...');
+      console.log('Fetching tournaments for HomePage...', new Date().toISOString());
       setLoading(true);
       
       try {
         const tournamentsData = await getAllTournaments();
+        console.log('Tournaments fetched:', tournamentsData.length);
         setTournaments(tournamentsData);
         
         // Find a tournament to showcase (prefer first active tournament, or first closed one if no active ones)
