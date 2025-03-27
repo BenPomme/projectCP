@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { db } from '../../config/firebase';
 import { collection, query, getDocs, doc, updateDoc, orderBy, where } from 'firebase/firestore';
+import { useParams, useNavigate } from 'react-router-dom';
 
 interface Entry {
   id: string;
@@ -12,33 +13,63 @@ interface Entry {
   status: 'pending' | 'approved' | 'rejected';
   createdAt: any;
   voteCount: number;
+  tournamentId?: string;
 }
 
 export default function EntriesAdminPage() {
+  const { tournamentId } = useParams<{ tournamentId: string }>();
+  const navigate = useNavigate();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [activeTournamentId, setActiveTournamentId] = useState<string | undefined>(tournamentId);
 
   useEffect(() => {
+    if (tournamentId !== activeTournamentId) {
+      setActiveTournamentId(tournamentId);
+      setEntries([]);
+    }
     fetchEntries();
-  }, [filter]);
+  }, [filter, tournamentId]);
 
   const fetchEntries = async () => {
     try {
       setLoading(true);
       setError(null);
 
+      console.log(`Fetching entries${tournamentId ? ` for tournament ${tournamentId}` : ''}, filter: ${filter}`);
+
       let entriesQuery;
-      if (filter === 'all') {
-        entriesQuery = query(collection(db, 'entries'), orderBy('createdAt', 'desc'));
+      
+      if (tournamentId) {
+        // If we have a tournamentId, filter by that tournament
+        if (filter === 'all') {
+          entriesQuery = query(
+            collection(db, 'entries'), 
+            where('tournamentId', '==', tournamentId),
+            orderBy('createdAt', 'desc')
+          );
+        } else {
+          entriesQuery = query(
+            collection(db, 'entries'),
+            where('tournamentId', '==', tournamentId),
+            where('status', '==', filter),
+            orderBy('createdAt', 'desc')
+          );
+        }
       } else {
-        entriesQuery = query(
-          collection(db, 'entries'),
-          where('status', '==', filter),
-          orderBy('createdAt', 'desc')
-        );
+        // No tournamentId specified, get all entries
+        if (filter === 'all') {
+          entriesQuery = query(collection(db, 'entries'), orderBy('createdAt', 'desc'));
+        } else {
+          entriesQuery = query(
+            collection(db, 'entries'),
+            where('status', '==', filter),
+            orderBy('createdAt', 'desc')
+          );
+        }
       }
 
       const querySnapshot = await getDocs(entriesQuery);
@@ -48,6 +79,7 @@ export default function EntriesAdminPage() {
         status: doc.data().status || 'pending', // Default to pending if status is not set
       })) as Entry[];
 
+      console.log(`Found ${entriesData.length} entries`);
       setEntries(entriesData);
     } catch (err: any) {
       console.error('Error fetching entries:', err);

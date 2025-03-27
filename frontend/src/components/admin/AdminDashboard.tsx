@@ -62,6 +62,16 @@ export default function AdminDashboard() {
     return `${diffDays}d ${diffHours}h remaining`;
   };
 
+  const handleNavigateToSettings = () => {
+    if (tournamentState && tournamentState.id) {
+      navigate(`/admin/tournament/${tournamentState.id}/settings`);
+    } else {
+      console.error('No tournament ID available for navigation');
+      // Fallback to the general settings page
+      navigate('/admin/settings');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -137,7 +147,7 @@ export default function AdminDashboard() {
 
                     <div className="flex flex-col sm:flex-row gap-4">
                       <button
-                        onClick={() => navigate('/admin/settings')}
+                        onClick={handleNavigateToSettings}
                         className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                       >
                         Manage Tournament Settings
