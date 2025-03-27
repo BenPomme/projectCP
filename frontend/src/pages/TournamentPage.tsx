@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { getTournamentById, getEntriesForTournament } from '../services/firebase';
+import { getTournamentById, getEntriesForTournament, getApprovedEntriesForTournament } from '../services/firebase';
 import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
 import TournamentPasswordPrompt from '../components/TournamentPasswordPrompt';
@@ -16,6 +16,34 @@ export default function TournamentPage() {
   const [error, setError] = useState<string | null>(null);
   const [passwordRequired, setPasswordRequired] = useState(false);
   const [hasAccessPermission, setHasAccessPermission] = useState(false);
+
+  // Function to fetch entries for the tournament
+  const fetchEntries = async () => {
+    try {
+      if (!actualTournamentId) return;
+      
+      console.log('Fetching entries for tournament:', actualTournamentId);
+      const entriesData = await getEntriesForTournament(actualTournamentId);
+      setEntries(entriesData);
+    } catch (error) {
+      console.error('Error fetching entries:', error);
+      setError('Failed to load entries');
+    }
+  };
+
+  // Function to fetch results for completed tournaments
+  const fetchResults = async () => {
+    try {
+      if (!actualTournamentId) return;
+      
+      console.log('Fetching results for tournament:', actualTournamentId);
+      const approvedEntries = await getApprovedEntriesForTournament(actualTournamentId);
+      setEntries(approvedEntries);
+    } catch (error) {
+      console.error('Error fetching results:', error);
+      setError('Failed to load results');
+    }
+  };
 
   useEffect(() => {
     const fetchTournament = async () => {
