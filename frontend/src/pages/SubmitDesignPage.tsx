@@ -15,16 +15,18 @@ export default function SubmitDesignPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [tournament, setTournament] = useState<any>(null);
-  const [userEntries, setUserEntries] = useState<any[]>([]);
-  const [loadingData, setLoadingData] = useState(true);
+  const [tournament, setTournament] = useState<TournamentState | null>(null);
+  const [existingEntries, setExistingEntries] = useState<TournamentEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [passwordRequired, setPasswordRequired] = useState(false);
   const [hasAccessPermission, setHasAccessPermission] = useState(false);
   const [maxEntriesReached, setMaxEntriesReached] = useState(false);
 
   // Get the actual tournament ID or handle 'current' specially
-  const effectiveTournamentId = tournamentId || 'current';
+  const actualTournamentId = tournamentId;
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -34,24 +36,24 @@ export default function SubmitDesignPage() {
     }
 
     const fetchData = async () => {
-      setLoadingData(true);
+      setIsLoading(true);
       try {
-        if (!effectiveTournamentId) {
+        if (!actualTournamentId) {
           setError('Tournament ID is required');
           return;
         }
 
         // Handle 'current' by fetching the active tournament
-        let actualTournamentId = effectiveTournamentId;
+        let actualTournamentId = actualTournamentId;
         let tournamentData;
         
-        if (effectiveTournamentId === 'current') {
+        if (actualTournamentId === 'current') {
           console.log('Fetching active tournament...');
           tournamentData = await getTournamentState();
           
           if (!tournamentData) {
             setError('No active tournament found. Please select a specific tournament.');
-            setLoadingData(false);
+            setIsLoading(false);
             return;
           }
           
@@ -59,19 +61,19 @@ export default function SubmitDesignPage() {
           console.log(`Found active tournament: ${tournamentData.name} (ID: ${actualTournamentId})`);
         } else {
           // Fetch specific tournament data
-          tournamentData = await getTournamentById(effectiveTournamentId);
+          tournamentData = await getTournamentById(actualTournamentId);
         }
         
         if (!tournamentData) {
           setError(`Tournament not found. Please go back to the home page and select an active tournament.`);
-          setLoadingData(false);
+          setIsLoading(false);
           return;
         }
         
         // Check if submissions are allowed in this tournament's current phase
         if (tournamentData.currentPhase !== 'submission') {
           setError('This tournament is not currently accepting submissions');
-          setLoadingData(false);
+          setIsLoading(false);
           return;
         }
         
@@ -79,14 +81,18 @@ export default function SubmitDesignPage() {
         
         // Check if tournament is password protected
         if (tournamentData.isPasswordProtected) {
+          console.log('Tournament is password protected');
           // Check if user is the owner or an admin (they bypass password protection)
           const isOwnerOrAdmin = user?.id === tournamentData.ownerId || user?.isAdmin === true;
+          console.log('Is user owner or admin?', isOwnerOrAdmin);
           
           if (!isOwnerOrAdmin) {
             // Check if user has already provided the password for this tournament
             const hasAccess = localStorage.getItem(`tournament_access_${actualTournamentId}_${user?.id}`);
+            console.log('Has access from localStorage?', !!hasAccess);
             
             if (!hasAccess) {
+              console.log('Setting passwordRequired to true');
               setPasswordRequired(true);
               return;
             }
@@ -97,7 +103,7 @@ export default function SubmitDesignPage() {
         
         // Get user entries for this tournament
         const userEntries = await getUserEntriesForTournament(actualTournamentId, user?.id || '');
-        setUserEntries(userEntries);
+        setExistingEntries(userEntries);
         
         // Check if user has reached the maximum number of entries
         if (tournamentData.maxEntriesPerUser !== null && userEntries.length >= tournamentData.maxEntriesPerUser) {
@@ -107,14 +113,14 @@ export default function SubmitDesignPage() {
         console.error('Error fetching tournament data:', err);
         setError(err.message || 'Failed to load tournament data');
       } finally {
-        setLoadingData(false);
+        setIsLoading(false);
       }
     };
 
     if (user) {
       fetchData();
     }
-  }, [user, authLoading, navigate, effectiveTournamentId]);
+  }, [user, authLoading, navigate, actualTournamentId]);
 
   // Handle successful password entry
   const handlePasswordSuccess = () => {
@@ -122,7 +128,7 @@ export default function SubmitDesignPage() {
     setHasAccessPermission(true);
     
     // Check if user has reached the maximum number of entries
-    if (tournament?.maxEntriesPerUser !== null && userEntries.length >= tournament.maxEntriesPerUser) {
+    if (tournament?.maxEntriesPerUser !== null && existingEntries.length >= tournament.maxEntriesPerUser) {
       setMaxEntriesReached(true);
     }
   };
@@ -148,7 +154,7 @@ export default function SubmitDesignPage() {
     
     // Check if user has reached entry limit
     if (tournament?.maxEntriesPerUser !== null && 
-        userEntries.length >= tournament.maxEntriesPerUser) {
+        existingEntries.length >= tournament.maxEntriesPerUser) {
       setError(`You have reached the maximum number of entries (${tournament.maxEntriesPerUser}) for this tournament`);
       return;
     }
@@ -200,7 +206,7 @@ export default function SubmitDesignPage() {
     }
   };
   
-  if (loadingData) {
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
@@ -240,7 +246,7 @@ export default function SubmitDesignPage() {
   // Calculate remaining entries
   const remainingEntries = tournament?.maxEntriesPerUser === null 
     ? 'Unlimited' 
-    : tournament?.maxEntriesPerUser - userEntries.length;
+    : tournament?.maxEntriesPerUser - existingEntries.length;
   
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -260,7 +266,7 @@ export default function SubmitDesignPage() {
                   Submission Phase Ends: {tournament.submissionPhaseEnd.toLocaleDateString()}
                 </p>
                 <p className="text-sm text-gray-600">
-                  Your Entries: {userEntries.length} / {tournament.maxEntriesPerUser === null ? '∞' : tournament.maxEntriesPerUser}
+                  Your Entries: {existingEntries.length} / {tournament.maxEntriesPerUser === null ? '∞' : tournament.maxEntriesPerUser}
                 </p>
                 <p className="text-sm text-gray-600">
                   Remaining Entries: {remainingEntries}
@@ -291,7 +297,7 @@ export default function SubmitDesignPage() {
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
                       required
-                      disabled={loading || (tournament?.maxEntriesPerUser !== null && userEntries.length >= tournament?.maxEntriesPerUser)}
+                      disabled={loading || (tournament?.maxEntriesPerUser !== null && existingEntries.length >= tournament?.maxEntriesPerUser)}
                     />
                   </div>
                 </div>
@@ -307,7 +313,7 @@ export default function SubmitDesignPage() {
                       className="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md"
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      disabled={loading || (tournament?.maxEntriesPerUser !== null && userEntries.length >= tournament?.maxEntriesPerUser)}
+                      disabled={loading || (tournament?.maxEntriesPerUser !== null && existingEntries.length >= tournament?.maxEntriesPerUser)}
                     />
                   </div>
                 </div>
@@ -321,7 +327,7 @@ export default function SubmitDesignPage() {
                       type="button"
                       className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={loading || (tournament?.maxEntriesPerUser !== null && userEntries.length >= tournament?.maxEntriesPerUser)}
+                      disabled={loading || (tournament?.maxEntriesPerUser !== null && existingEntries.length >= tournament?.maxEntriesPerUser)}
                     >
                       Choose file
                     </button>
@@ -331,7 +337,7 @@ export default function SubmitDesignPage() {
                       className="hidden"
                       accept="image/*"
                       onChange={handleFileChange}
-                      disabled={loading || (tournament?.maxEntriesPerUser !== null && userEntries.length >= tournament?.maxEntriesPerUser)}
+                      disabled={loading || (tournament?.maxEntriesPerUser !== null && existingEntries.length >= tournament?.maxEntriesPerUser)}
                     />
                     <span className="ml-2 text-sm text-gray-500">
                       {imageFile ? imageFile.name : 'No file chosen'}
@@ -379,7 +385,7 @@ export default function SubmitDesignPage() {
                 <button
                   type="submit"
                   className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={loading || !imageFile || !title.trim() || (tournament?.maxEntriesPerUser !== null && userEntries.length >= tournament?.maxEntriesPerUser)}
+                  disabled={loading || !imageFile || !title.trim() || (tournament?.maxEntriesPerUser !== null && existingEntries.length >= tournament?.maxEntriesPerUser)}
                 >
                   {loading ? 'Submitting...' : 'Submit'}
                 </button>

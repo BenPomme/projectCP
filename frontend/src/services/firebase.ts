@@ -898,55 +898,28 @@ export const checkTournamentPassword = async (
   password: string
 ): Promise<boolean> => {
   try {
-    console.log(`Checking password for tournament ${tournamentId}`);
+    console.log(`Checking password for tournament ${tournamentId}...`);
     
-    const tournamentRef = doc(db, 'tournaments', tournamentId);
-    const tournamentSnap = await getDoc(tournamentRef);
+    // Get the tournament
+    const tournament = await getTournamentById(tournamentId);
     
-    if (!tournamentSnap.exists()) {
-      throw new Error('Tournament not found');
+    if (!tournament) {
+      console.error('Tournament not found');
+      return false;
     }
     
-    const tournament = tournamentSnap.data();
-    
-    // If tournament is not password protected, return true
     if (!tournament.isPasswordProtected) {
+      console.log('Tournament is not password protected');
       return true;
     }
     
-    // Check if the provided password matches
+    // Compare passwords
     return tournament.password === password;
   } catch (error) {
     console.error('Error checking tournament password:', error);
     return false;
   }
 };
-
-// Get entries for a specific tournament
-export async function getEntriesForTournament(tournamentId: string): Promise<TournamentEntry[]> {
-  try {
-    console.log(`Fetching entries for tournament ${tournamentId}...`);
-    const entriesRef = collection(db, 'entries');
-    const q = query(entriesRef, where('tournamentId', '==', tournamentId));
-    const entriesSnapshot = await getDocs(q);
-    
-    const entries = entriesSnapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        ...data,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
-        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
-      } as TournamentEntry;
-    });
-    
-    console.log(`Found ${entries.length} entries for tournament ${tournamentId}`);
-    return entries;
-  } catch (error) {
-    console.error('Error fetching entries:', error);
-    throw error;
-  }
-}
 
 // Get only approved entries for a specific tournament
 export async function getApprovedEntriesForTournament(tournamentId: string): Promise<TournamentEntry[]> {

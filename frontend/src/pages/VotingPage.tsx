@@ -1,37 +1,40 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../store/authStore';
+import { useAuth } from '../hooks/useAuth';
 import { 
   getTournamentById, 
-  getEntriesForTournament, 
+  getApprovedEntriesForTournament,
   submitVote, 
   getUserVotesForTournament,
   getTournamentState,
-  getApprovedEntriesForTournament
+  TournamentState,
+  TournamentEntry,
+  TournamentVote
 } from '../services/firebase';
 import VotingScale from '../components/VotingScale';
 import TournamentPasswordPrompt from '../components/TournamentPasswordPrompt';
 
 export default function VotingPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
-  const { user } = useAuthStore();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [entries, setEntries] = React.useState<any[]>([]);
-  const [tournament, setTournament] = React.useState<any>(null);
-  const [userVotes, setUserVotes] = React.useState<Record<string, number>>({});
-  const [loading, setLoading] = React.useState(true);
+  const [tournament, setTournament] = React.useState<TournamentState | null>(null);
+  const [entries, setEntries] = React.useState<TournamentEntry[]>([]);
+  const [userVotes, setUserVotes] = React.useState<TournamentVote[]>([]);
+  const [currentIndex, setCurrentIndex] = React.useState(0);
   const [error, setError] = React.useState<string | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [passwordRequired, setPasswordRequired] = React.useState(false);
   const [hasAccessPermission, setHasAccessPermission] = React.useState(false);
   const [reachedVoteLimit, setReachedVoteLimit] = React.useState(false);
-  const [actualTournamentId, setActualTournamentId] = React.useState<string | null>(null);
   const [entriesLoading, setEntriesLoading] = React.useState(true);
-
+  
   // Get the actual tournament ID or handle 'current' specially
-  const effectiveTournamentId = tournamentId || 'current';
+  const actualTournamentId = tournamentId;
 
   const fetchData = async () => {
-    setLoading(true);
+    setIsLoading(true);
     try {
       if (!actualTournamentId) {
         setError('Tournament ID is required');
@@ -56,14 +59,18 @@ export default function VotingPage() {
       
       // Check if tournament is password protected
       if (tournamentData.isPasswordProtected) {
+        console.log('Tournament is password protected');
         // Check if user is the owner or an admin (they bypass password protection)
         const isOwnerOrAdmin = user?.id === tournamentData.ownerId || user?.isAdmin === true;
+        console.log('Is user owner or admin?', isOwnerOrAdmin);
         
         if (!isOwnerOrAdmin) {
           // Check if user has already provided the password for this tournament
           const hasAccess = localStorage.getItem(`tournament_access_${actualTournamentId}_${user?.id}`);
+          console.log('Has access from localStorage?', !!hasAccess);
           
           if (!hasAccess) {
+            console.log('Setting passwordRequired to true');
             setPasswordRequired(true);
             return;
           }
@@ -78,7 +85,7 @@ export default function VotingPage() {
       console.error('Error fetching tournament data:', err);
       setError(err.message || 'Failed to load tournament data');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -142,14 +149,14 @@ export default function VotingPage() {
     
     try {
       // Check if user has already voted for this entry
-      if (userVotes[entryId]) {
+      if (userVotes.some(vote => vote.entryId === entryId)) {
         setError('You have already voted for this entry');
         return;
       }
 
       // Check if user has reached vote limit
       if (tournament?.maxVotesPerUser !== null && tournament?.maxVotesPerUser !== undefined) {
-        const voteCount = Object.keys(userVotes).length;
+        const voteCount = userVotes.length;
         if (voteCount >= tournament.maxVotesPerUser) {
           setError(`You have reached the maximum number of votes (${tournament.maxVotesPerUser})`);
           return;
@@ -157,18 +164,14 @@ export default function VotingPage() {
       }
 
       console.log(`Submitting vote: Entry ID ${entryId}, Rating ${rating}, Tournament ID ${tournament.id}`);
-      setLoading(true);
+      setIsSubmitting(true);
       
       try {
         await submitVote(entryId, rating, tournament.id);
         console.log('Vote submitted successfully');
         
         // Update local state temporarily
-        setUserVotes(prev => {
-          const newVotes = { ...prev, [entryId]: rating };
-          console.log('Updated user votes:', newVotes);
-          return newVotes;
-        });
+        setUserVotes(prev => [...prev, { entryId, rating }]);
         
         // Reload data
         console.log('Reloading data after vote...');
@@ -179,7 +182,7 @@ export default function VotingPage() {
         console.error('Error during vote submission:', voteError);
         setError(`Failed to submit vote: ${voteError.message}`);
       } finally {
-        setLoading(false);
+        setIsSubmitting(false);
       }
     } catch (err) {
       setError('Failed to submit vote');
@@ -187,7 +190,7 @@ export default function VotingPage() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
@@ -234,7 +237,7 @@ export default function VotingPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <p className="text-gray-600">Votes Cast:</p>
-            <p className="text-2xl font-bold text-primary-600">{Object.keys(userVotes).length}</p>
+            <p className="text-2xl font-bold text-primary-600">{userVotes.length}</p>
           </div>
           <div>
             <p className="text-gray-600">Vote Limit:</p>
@@ -281,7 +284,7 @@ export default function VotingPage() {
               <VotingScale
                 entryId={entry.id}
                 onVote={(rating) => handleVote(entry.id, rating)}
-                currentRating={userVotes[entry.id]}
+                currentRating={userVotes.find(vote => vote.entryId === entry.id)?.rating || 0}
                 tournamentState={tournament}
               />
             </div>

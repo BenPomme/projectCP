@@ -7,6 +7,7 @@ import TournamentPasswordPrompt from '../components/TournamentPasswordPrompt';
 
 export default function TournamentPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
+  const actualTournamentId = tournamentId;
   const { user } = useAuth();
   const navigate = useNavigate();
   const [tournament, setTournament] = useState<any>(null);
@@ -20,12 +21,12 @@ export default function TournamentPage() {
     const fetchTournament = async () => {
       try {
         setLoading(true);
-        if (!tournamentId) {
+        if (!actualTournamentId) {
           console.error('No tournament ID provided');
           return;
         }
 
-        const data = await getTournamentById(tournamentId);
+        const data = await getTournamentById(actualTournamentId);
         console.log('Tournament found:', data);
         
         if (!data) {
@@ -37,14 +38,18 @@ export default function TournamentPage() {
         
         // Check if this tournament is password protected
         if (data.isPasswordProtected) {
+          console.log('Tournament is password protected');
           // If user is the owner or an admin, they can bypass the password
           const isOwnerOrAdmin = user?.id === data.ownerId || user?.isAdmin === true;
+          console.log('Is user owner or admin?', isOwnerOrAdmin);
           
           if (!isOwnerOrAdmin) {
             // Check if this user has already entered the password for this tournament
-            const hasAccess = localStorage.getItem(`tournament_access_${tournamentId}_${user?.id}`);
+            const hasAccess = localStorage.getItem(`tournament_access_${actualTournamentId}_${user?.id}`);
+            console.log('Has access from localStorage?', !!hasAccess);
             
             if (!hasAccess) {
+              console.log('Setting passwordRequired to true');
               setPasswordRequired(true);
               return;
             }
@@ -65,10 +70,10 @@ export default function TournamentPage() {
       }
     };
 
-    if (tournamentId) {
+    if (actualTournamentId) {
       fetchTournament();
     }
-  }, [tournamentId, user]);
+  }, [actualTournamentId, user]);
 
   // Handle successful password submission
   const handlePasswordSuccess = () => {
@@ -125,7 +130,7 @@ export default function TournamentPage() {
   if (passwordRequired && !hasAccessPermission) {
     return (
       <TournamentPasswordPrompt
-        tournamentId={tournamentId!}
+        tournamentId={actualTournamentId!}
         tournamentName={tournament.name}
         onPasswordSuccess={handlePasswordSuccess}
       />
@@ -138,7 +143,26 @@ export default function TournamentPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">{tournament.name}</h1>
+        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+          <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">{tournament.name}</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Phase: {tournament.currentPhase === 'submission' ? 'Submission' : 
+                        tournament.currentPhase === 'voting' ? 'Voting' : 'Completed'}
+              </p>
+            </div>
+            
+            {tournament.isPasswordProtected && (
+              <span className="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                </svg>
+                Password Protected
+              </span>
+            )}
+          </div>
+        </div>
         
         <div className="mt-4 flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-6">
           <div className="bg-white overflow-hidden shadow rounded-lg p-4 md:w-1/3">

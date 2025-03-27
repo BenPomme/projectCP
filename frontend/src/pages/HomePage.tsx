@@ -170,16 +170,27 @@ export default function HomePage() {
                 <div className="p-5">
                   <div className="flex justify-between items-start">
                     <h3 className="text-lg font-semibold text-gray-900">{tournament.name}</h3>
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      tournament.currentPhase === 'submission' 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : tournament.currentPhase === 'voting'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {tournament.currentPhase === 'submission' ? 'Submission' : 
-                       tournament.currentPhase === 'voting' ? 'Voting' : 'Completed'}
-                    </span>
+                    <div className="flex space-x-1">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        tournament.currentPhase === 'submission' 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : tournament.currentPhase === 'voting'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {tournament.currentPhase === 'submission' ? 'Submission' : 
+                         tournament.currentPhase === 'voting' ? 'Voting' : 'Completed'}
+                      </span>
+                      
+                      {tournament.isPasswordProtected && (
+                        <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 flex items-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                          </svg>
+                          Private
+                        </span>
+                      )}
+                    </div>
                   </div>
                   
                   <p className="mt-2 text-sm text-gray-600 line-clamp-2">
@@ -265,9 +276,20 @@ export default function HomePage() {
                 <div className="p-5">
                   <div className="flex justify-between items-start">
                     <h3 className="text-lg font-semibold text-gray-900">{tournament.name}</h3>
-                    <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
-                      Completed
-                    </span>
+                    <div className="flex space-x-1">
+                      <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
+                        Completed
+                      </span>
+                      
+                      {tournament.isPasswordProtected && (
+                        <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 flex items-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                          </svg>
+                          Private
+                        </span>
+                      )}
+                    </div>
                   </div>
                   
                   <p className="mt-2 text-sm text-gray-600 line-clamp-2">
