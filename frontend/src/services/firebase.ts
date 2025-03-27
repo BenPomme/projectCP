@@ -45,8 +45,8 @@ export interface Entry {
   title: string;
   description?: string;
   imageUrl: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: Date;
+  updatedAt: Date;
   voteCount: number;
   averageRating: number;
   status?: 'pending' | 'approved' | 'rejected';
@@ -60,7 +60,7 @@ export interface Vote {
   entryId: string;
   tournamentId: string;
   rating: number;
-  createdAt: Timestamp;
+  createdAt: Date;
 }
 
 export interface TournamentState {
@@ -139,15 +139,21 @@ export const getCurrentUser = (): Promise<FirebaseUser | null> => {
 
 // Entry functions
 export const createEntry = async (entry: Omit<Entry, 'id' | 'createdAt' | 'updatedAt' | 'voteCount' | 'averageRating'>) => {
+  const now = Timestamp.now();
   const newEntry = {
     ...entry,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
+    createdAt: now.toDate(),
+    updatedAt: now.toDate(),
     voteCount: 0,
     averageRating: 0
   };
   
-  const docRef = await addDoc(collection(db, 'entries'), newEntry);
+  const docRef = await addDoc(collection(db, 'entries'), {
+    ...newEntry,
+    // Convert back to Timestamp for Firestore storage
+    createdAt: now,
+    updatedAt: now
+  });
   return { id: docRef.id, ...newEntry };
 };
 
@@ -169,17 +175,18 @@ export const getEntriesForTournament = async (tournamentId: string): Promise<Ent
     );
     
     const querySnapshot = await getDocs(entriesQuery);
-    const entries = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: convertTimestampToDate(doc.data().createdAt),
-      updatedAt: convertTimestampToDate(doc.data().updatedAt)
-    }) as Entry);
+    const entries = querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: safelyConvertToDate(data.createdAt),
+        updatedAt: safelyConvertToDate(data.updatedAt)
+      } as Entry;
+    });
     
     // Sort by createdAt descending on the client side
-    entries.sort((a, b) => {
-      return b.createdAt.getTime() - a.createdAt.getTime();
-    });
+    entries.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     
     console.log(`Found ${entries.length} entries for tournament ${tournamentId}`);
     return entries;
@@ -206,10 +213,15 @@ export const getEntries = async (tournamentId?: string): Promise<Entry[]> => {
     // Fallback to all entries - this should be avoided
     const entriesQuery = query(collection(db, 'entries'), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(entriesQuery);
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }) as Entry);
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: safelyConvertToDate(data.createdAt),
+        updatedAt: safelyConvertToDate(data.updatedAt)
+      } as Entry;
+    });
   } catch (error) {
     console.error('Error getting entries:', error);
     return [];
@@ -233,8 +245,8 @@ export const getUserEntriesForTournament = async (tournamentId: string, userId: 
       return {
         id: doc.id,
         ...data,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
-        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
+        createdAt: safelyConvertToDate(data.createdAt),
+        updatedAt: safelyConvertToDate(data.updatedAt)
       } as Entry;
     });
     
