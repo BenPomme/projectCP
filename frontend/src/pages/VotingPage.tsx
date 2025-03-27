@@ -1,18 +1,19 @@
 import React from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { 
   getTournamentById, 
   getApprovedEntriesForTournament,
   submitVote, 
   getUserVotesForTournament,
-  getTournamentState,
+  getTournaments,
   TournamentState,
   TournamentEntry,
   TournamentVote
 } from '../services/firebase';
 import VotingScale from '../components/VotingScale';
 import TournamentPasswordPrompt from '../components/TournamentPasswordPrompt';
+import { format } from 'date-fns';
 
 export default function VotingPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
@@ -29,9 +30,41 @@ export default function VotingPage() {
   const [hasAccessPermission, setHasAccessPermission] = React.useState(false);
   const [reachedVoteLimit, setReachedVoteLimit] = React.useState(false);
   const [entriesLoading, setEntriesLoading] = React.useState(true);
+  const [votingTournaments, setVotingTournaments] = React.useState<TournamentState[]>([]);
   
-  // Get the actual tournament ID or handle 'current' specially
+  // Get the actual tournament ID
   const actualTournamentId = tournamentId;
+
+  // Fetch available voting tournaments
+  React.useEffect(() => {
+    const fetchVotingTournaments = async () => {
+      try {
+        setIsLoading(true);
+        const allTournaments = await getTournaments();
+        
+        // Filter to only tournaments in voting phase
+        const tournamentsInVotingPhase = allTournaments.filter(
+          t => t.currentPhase === 'voting'
+        );
+        
+        console.log(`Found ${tournamentsInVotingPhase.length} tournaments in voting phase`);
+        setVotingTournaments(tournamentsInVotingPhase);
+        
+        // If we have a tournament ID, fetch that specific tournament
+        if (actualTournamentId) {
+          fetchData();
+        } else {
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error('Error fetching voting tournaments:', err);
+        setError('Failed to load available tournaments');
+        setIsLoading(false);
+      }
+    };
+    
+    fetchVotingTournaments();
+  }, []);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -95,13 +128,18 @@ export default function VotingPage() {
     try {
       setEntriesLoading(true);
       
+      if (!actualTournamentId) {
+        console.error('No tournament ID provided to load entries');
+        return;
+      }
+      
       // Get approved entries for this tournament
-      const entriesData = await getApprovedEntriesForTournament(actualTournamentId!);
+      const entriesData = await getApprovedEntriesForTournament(actualTournamentId);
       console.log(`Found ${entriesData.length} approved entries for tournament ${actualTournamentId}`);
       
       // Get user votes for this tournament
       if (user?.id) {
-        const userVotesData = await getUserVotesForTournament(actualTournamentId!, user.id);
+        const userVotesData = await getUserVotesForTournament(actualTournamentId, user.id);
         console.log(`Found ${userVotesData.length} votes by user for tournament ${actualTournamentId}`);
         setUserVotes(userVotesData);
         
@@ -123,7 +161,7 @@ export default function VotingPage() {
   };
 
   React.useEffect(() => {
-    if (user) {
+    if (user && actualTournamentId) {
       fetchData();
     }
   }, [actualTournamentId, user]);
@@ -199,6 +237,66 @@ export default function VotingPage() {
     );
   }
 
+  // If no tournament is selected, show list of available voting tournaments
+  if (!actualTournamentId) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <h1 className="text-3xl font-bold mb-8">Vote on Tournaments</h1>
+        
+        {votingTournaments.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {votingTournaments.map(tournament => (
+              <div key={tournament.id} className="bg-white overflow-hidden shadow rounded-lg">
+                <div className="p-5">
+                  <div className="flex justify-between items-start">
+                    <h3 className="text-lg font-semibold text-gray-900">{tournament.name}</h3>
+                    <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                      Voting
+                    </span>
+                  </div>
+                  
+                  <p className="mt-2 text-sm text-gray-600 line-clamp-2">
+                    {tournament.description || 'No description provided.'}
+                  </p>
+                  
+                  <div className="mt-4 text-sm text-gray-500 space-y-1">
+                    <div>
+                      <span>Voting ends: </span>
+                      <span>{format(tournament.votingPhaseEnd, 'PPP')}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-6 flex space-x-3">
+                    <Link
+                      to={`/tournament/${tournament.id}/vote`}
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+                    >
+                      Vote Now
+                    </Link>
+                    
+                    <Link
+                      to={`/tournament/${tournament.id}`}
+                      className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                      View Details
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-lg shadow-md p-6 text-center">
+            <p className="text-gray-600">No tournaments currently in the voting phase.</p>
+            <Link to="/" className="mt-4 inline-block text-primary-600 hover:underline">
+              Return to Home
+            </Link>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // Display password prompt if tournament requires a password
   if (passwordRequired && !hasAccessPermission && tournament) {
     return (
@@ -217,9 +315,9 @@ export default function VotingPage() {
           <p className="text-red-700">{error || "Tournament data not available"}</p>
           <button 
             className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/vote')}
           >
-            Return to Home
+            Return to Voting Page
           </button>
         </div>
       </div>
