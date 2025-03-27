@@ -38,17 +38,9 @@ export default function HomePage() {
           
           const entries = await getApprovedEntriesForTournament(showcaseTournament.id);
           
-          // Extremely simple approach - convert all dates to timestamps before sorting
-          const recentEntries = entries
-            .map(entry => ({
-              ...entry,
-              // Add a numeric timestamp for sorting - this avoids any method calls during sort
-              sortTimeStamp: entry.createdAt instanceof Date ? 
-                entry.createdAt.getTime() : 
-                new Date(entry.createdAt).getTime()
-            }))
-            .sort((a, b) => b.sortTimeStamp - a.sortTimeStamp)
-            .slice(0, 3);
+          // Skip sorting altogether and just take the first 3 entries
+          // This avoids any potential issues with date formats
+          const recentEntries = entries.slice(0, 3);
             
           setShowcaseEntries(recentEntries);
         }
