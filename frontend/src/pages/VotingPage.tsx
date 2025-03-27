@@ -383,7 +383,7 @@ export default function VotingPage() {
               <VotingScale
                 entryId={entry.id}
                 onVote={(rating) => handleVote(entry.id, rating)}
-                currentRating={userVotes.find(vote => vote.entryId === entry.id)?.rating || 0}
+                currentRating={userVotes.find(vote => vote.entryId === entry.id)?.rating}
                 tournamentState={tournament}
               />
             </div>
