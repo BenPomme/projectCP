@@ -49,6 +49,13 @@ jobs:
           echo "Waiting for pull request to be created..."
           sleep 10
           
+      - name: List Pull Requests
+        run: |
+          echo "Listing all pull requests..."
+          gh pr list --json number,title,url,state
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          
       - name: Enable auto-merge for Pull Requests
         uses: pascalgn/automerge-action@v0.15.6
         env:
@@ -58,4 +65,6 @@ jobs:
           MERGE_DELETE_BRANCH: "false"
           MERGE_COMMIT_MESSAGE: "Merge fix/date-handling into main"
           PR_BRANCH: "fix/date-handling"
-          PR_TITLE: "Fix date handling in HomePage and firebase service" 
+          PR_TITLE: "Fix date handling in HomePage and firebase service"
+          MERGE_RETRIES: "3"
+          MERGE_RETRY_SLEEP: "10000" 
