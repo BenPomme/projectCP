@@ -967,12 +967,12 @@ export async function getAllTournaments(): Promise<TournamentState[]> {
       return {
         id: doc.id,
         ...data,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
-        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
-        submissionPhaseStart: data.submissionPhaseStart instanceof Timestamp ? data.submissionPhaseStart.toDate() : data.submissionPhaseStart,
-        submissionPhaseEnd: data.submissionPhaseEnd instanceof Timestamp ? data.submissionPhaseEnd.toDate() : data.submissionPhaseEnd,
-        votingPhaseStart: data.votingPhaseStart instanceof Timestamp ? data.votingPhaseStart.toDate() : data.votingPhaseStart,
-        votingPhaseEnd: data.votingPhaseEnd instanceof Timestamp ? data.votingPhaseEnd.toDate() : data.votingPhaseEnd,
+        createdAt: convertTimestampToDate(data.createdAt),
+        updatedAt: convertTimestampToDate(data.updatedAt),
+        submissionPhaseStart: convertTimestampToDate(data.submissionPhaseStart),
+        submissionPhaseEnd: convertTimestampToDate(data.submissionPhaseEnd),
+        votingPhaseStart: convertTimestampToDate(data.votingPhaseStart),
+        votingPhaseEnd: convertTimestampToDate(data.votingPhaseEnd),
       } as TournamentState;
     });
     

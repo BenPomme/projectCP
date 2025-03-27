@@ -37,17 +37,44 @@ export default function HomePage() {
           console.log(`Fetching recent entries for showcase tournament ${showcaseTournament.id}...`);
           
           const entries = await getApprovedEntriesForTournament(showcaseTournament.id);
+          
           // Sort by creation date descending and take the first 3
+          const safelyGetTime = (date: any) => {
+            try {
+              if (!date) return 0;
+              
+              if (date instanceof Date) return date.getTime();
+              
+              if (typeof date === 'object' && date !== null) {
+                // Try to convert from Firestore Timestamp if it has toDate
+                if (typeof date.toDate === 'function') {
+                  return date.toDate().getTime();
+                }
+                
+                // Try to convert from a date-like object
+                return new Date(date).getTime();
+              }
+              
+              if (typeof date === 'number') return date;
+              
+              // Try to parse string dates
+              if (typeof date === 'string') {
+                return new Date(date).getTime();
+              }
+              
+              return 0;
+            } catch (err) {
+              console.error("Error converting date format:", err);
+              return 0;
+            }
+          };
+          
+          // Use safe sort with fallbacks for any date format
           const recentEntries = entries
             .sort((a, b) => {
-              // Handle different date formats safely
-              const dateA = a.createdAt instanceof Date ? a.createdAt.getTime() : 
-                            typeof a.createdAt === 'object' && a.createdAt !== null ? new Date(a.createdAt).getTime() : 0;
-              
-              const dateB = b.createdAt instanceof Date ? b.createdAt.getTime() : 
-                            typeof b.createdAt === 'object' && b.createdAt !== null ? new Date(b.createdAt).getTime() : 0;
-              
-              return dateB - dateA;
+              const timeA = safelyGetTime(a.createdAt);
+              const timeB = safelyGetTime(b.createdAt);
+              return timeB - timeA;
             })
             .slice(0, 3);
             
