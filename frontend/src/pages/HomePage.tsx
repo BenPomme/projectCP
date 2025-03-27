@@ -41,22 +41,13 @@ export default function HomePage() {
           const recentEntries = entries
             .sort((a, b) => {
               // Handle different date formats safely
-              if (a.createdAt && b.createdAt) {
-                // If createdAt is a Firestore timestamp with toMillis method
-                if (typeof a.createdAt.toMillis === 'function' && typeof b.createdAt.toMillis === 'function') {
-                  return b.createdAt.toMillis() - a.createdAt.toMillis();
-                }
-                // If createdAt is a Date object
-                if (a.createdAt instanceof Date && b.createdAt instanceof Date) {
-                  return b.createdAt.getTime() - a.createdAt.getTime();
-                }
-                // If createdAt is a timestamp number
-                if (typeof a.createdAt === 'number' && typeof b.createdAt === 'number') {
-                  return b.createdAt - a.createdAt;
-                }
-              }
-              // Fallback: assume newer entries are at the beginning
-              return 0;
+              const dateA = a.createdAt instanceof Date ? a.createdAt.getTime() : 
+                            typeof a.createdAt === 'object' && a.createdAt !== null ? new Date(a.createdAt).getTime() : 0;
+              
+              const dateB = b.createdAt instanceof Date ? b.createdAt.getTime() : 
+                            typeof b.createdAt === 'object' && b.createdAt !== null ? new Date(b.createdAt).getTime() : 0;
+              
+              return dateB - dateA;
             })
             .slice(0, 3);
             
