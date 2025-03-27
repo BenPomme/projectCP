@@ -1,0 +1,44 @@
+name: Create and Merge Pull Request
+
+on:
+  push:
+    branches:
+      - fix/date-handling
+
+jobs:
+  create-pull-request:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "Merge fix/date-handling into main"
+          title: "Fix date handling in HomePage and firebase service"
+          body: |
+            This PR fixes the date handling issues in the HomePage component and firebase service.
+            
+            Changes made:
+            - Updated Entry and Vote interfaces to use Date instead of Timestamp
+            - Modified createEntry function to properly convert between Firestore Timestamp and JavaScript Date objects
+            - Updated all entry retrieval functions to use safelyConvertToDate helper
+            - Simplified date handling in HomePage component
+          branch: main
+          delete-branch: true
+          labels: |
+            bug
+            enhancement
+          draft: false
+          
+      - name: Enable auto-merge for Pull Requests
+        uses: pascalgn/automerge-action@v0.15.6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_LABELS: ""
+          MERGE_METHOD: "squash"
+          MERGE_DELETE_BRANCH: "true"
+          MERGE_COMMIT_MESSAGE: "Merge fix/date-handling into main" 
