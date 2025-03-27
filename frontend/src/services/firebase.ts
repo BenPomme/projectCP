@@ -171,14 +171,14 @@ export const getEntriesForTournament = async (tournamentId: string): Promise<Ent
     const querySnapshot = await getDocs(entriesQuery);
     const entries = querySnapshot.docs.map(doc => ({
       id: doc.id,
-      ...doc.data()
+      ...doc.data(),
+      createdAt: convertTimestampToDate(doc.data().createdAt),
+      updatedAt: convertTimestampToDate(doc.data().updatedAt)
     }) as Entry);
     
     // Sort by createdAt descending on the client side
     entries.sort((a, b) => {
-      const dateA = a.createdAt instanceof Date ? a.createdAt : a.createdAt.toDate();
-      const dateB = b.createdAt instanceof Date ? b.createdAt : b.createdAt.toDate();
-      return dateB.getTime() - dateA.getTime();
+      return b.createdAt.getTime() - a.createdAt.getTime();
     });
     
     console.log(`Found ${entries.length} entries for tournament ${tournamentId}`);
@@ -942,8 +942,8 @@ export async function getApprovedEntriesForTournament(tournamentId: string): Pro
       return {
         id: doc.id,
         ...data,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
-        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
+        createdAt: convertTimestampToDate(data.createdAt),
+        updatedAt: convertTimestampToDate(data.updatedAt),
       } as TournamentEntry;
     });
     
@@ -964,8 +964,8 @@ export async function getAllTournaments(): Promise<TournamentState[]> {
     
     const tournaments = tournamentsSnapshot.docs.map((doc) => {
       const data = doc.data();
-      return {
-        id: doc.id,
+      // Create a safe version of data with properly converted dates
+      const safeData = {
         ...data,
         createdAt: convertTimestampToDate(data.createdAt),
         updatedAt: convertTimestampToDate(data.updatedAt),
@@ -973,6 +973,12 @@ export async function getAllTournaments(): Promise<TournamentState[]> {
         submissionPhaseEnd: convertTimestampToDate(data.submissionPhaseEnd),
         votingPhaseStart: convertTimestampToDate(data.votingPhaseStart),
         votingPhaseEnd: convertTimestampToDate(data.votingPhaseEnd),
+      };
+      
+      // Make sure to remove any toMillis functions if they exist and are not valid
+      return {
+        id: doc.id,
+        ...safeData
       } as TournamentState;
     });
     

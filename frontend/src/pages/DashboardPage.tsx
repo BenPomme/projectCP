@@ -239,7 +239,14 @@ export default function DashboardPage() {
                   
                   <div className="mt-4 flex items-center justify-between text-sm">
                     <div className="text-gray-500">
-                      Submitted {formatDistanceToNow(entry.createdAt.toDate(), { addSuffix: true })}
+                      Submitted {formatDistanceToNow(
+                        entry.createdAt instanceof Date 
+                          ? entry.createdAt 
+                          : typeof entry.createdAt?.toDate === 'function'
+                            ? entry.createdAt.toDate()
+                            : new Date(entry.createdAt), 
+                        { addSuffix: true }
+                      )}
                     </div>
                     
                     {tournamentState?.currentPhase !== 'submission' && entry.status === 'approved' && (
