@@ -14,4 +14,6 @@ export interface TournamentState {
   maxEntriesPerUser: number | null; // null means unlimited
   maxVotesPerUser: number | null; // null means unlimited
   votingQuestion: string; // Question to display above the voting scale
+  password: string | null; // Optional password to restrict access to the tournament (null means no password)
+  isPasswordProtected: boolean; // Flag to quickly check if tournament requires a password
 } 

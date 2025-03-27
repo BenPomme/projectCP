@@ -9,6 +9,7 @@ import {
   getTournamentState
 } from '../services/firebase';
 import VotingScale from '../components/VotingScale';
+import TournamentPasswordPrompt from '../components/TournamentPasswordPrompt';
 
 export default function VotingPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
@@ -19,6 +20,8 @@ export default function VotingPage() {
   const [userVotes, setUserVotes] = React.useState<Record<string, number>>({});
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [passwordRequired, setPasswordRequired] = React.useState(false);
+  const [hasAccessPermission, setHasAccessPermission] = React.useState(false);
 
   // Get the actual tournament ID or handle 'current' specially
   const effectiveTournamentId = tournamentId || 'current';
@@ -67,24 +70,32 @@ export default function VotingPage() {
         return;
       }
       
-      // Get entries
-      const entriesData = await getEntriesForTournament(actualTournamentId);
-      console.log(`Found ${entriesData.length} entries for tournament ${actualTournamentId}`);
-      setEntries(entriesData);
-      
-      if (user?.id) {
-        // Get user votes
-        const votesData = await getUserVotesForTournament(user.id, actualTournamentId);
-        console.log(`Found ${Object.keys(votesData).length} votes for user ${user.id} in tournament ${actualTournamentId}`);
-        setUserVotes(votesData);
-
-        // Check if user has reached vote limit
-        if (tournamentData?.maxVotesPerUser !== null && tournamentData?.maxVotesPerUser !== undefined) {
-          const voteCount = Object.keys(votesData).length;
-          if (voteCount >= tournamentData.maxVotesPerUser) {
-            setError(`You have reached the maximum number of votes (${tournamentData.maxVotesPerUser}) for this tournament`);
-          }
+      // Check if tournament is password protected
+      if (tournamentData.isPasswordProtected) {
+        // Check if user has already provided the password for this tournament
+        const hasAccess = localStorage.getItem(`tournament_access_${actualTournamentId}`) === 'true';
+        
+        // Check if user is the owner or an admin (they bypass password protection)
+        const isOwnerOrAdmin = user?.id === tournamentData.ownerId || user?.isAdmin;
+        
+        if (hasAccess || isOwnerOrAdmin) {
+          // User has permission to access this tournament
+          setHasAccessPermission(true);
+          
+          // Proceed to load entries and votes
+          await loadEntriesAndVotes(actualTournamentId);
+        } else {
+          // Password is required
+          setPasswordRequired(true);
+          setLoading(false);
+          return;
         }
+      } else {
+        // Tournament is not password protected
+        setHasAccessPermission(true);
+        
+        // Load entries and votes
+        await loadEntriesAndVotes(actualTournamentId);
       }
     } catch (err) {
       setError('Failed to load voting data');
@@ -94,9 +105,56 @@ export default function VotingPage() {
     }
   };
 
+  // Helper function to load entries and votes
+  const loadEntriesAndVotes = async (tournamentId: string) => {
+    try {
+      // Get entries
+      const entriesData = await getEntriesForTournament(tournamentId);
+      console.log(`Found ${entriesData.length} entries for tournament ${tournamentId}`);
+      setEntries(entriesData);
+      
+      if (user?.id) {
+        // Get user votes
+        const votesData = await getUserVotesForTournament(user.id, tournamentId);
+        console.log(`Found ${Object.keys(votesData).length} votes for user ${user.id} in tournament ${tournamentId}`);
+        setUserVotes(votesData);
+
+        // Check if user has reached vote limit
+        if (tournament?.maxVotesPerUser !== null && tournament?.maxVotesPerUser !== undefined) {
+          const voteCount = Object.keys(votesData).length;
+          if (voteCount >= tournament.maxVotesPerUser) {
+            setError(`You have reached the maximum number of votes (${tournament.maxVotesPerUser}) for this tournament`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error loading entries and votes:', err);
+      throw err;
+    }
+  };
+
   React.useEffect(() => {
     fetchData();
   }, [user?.id, effectiveTournamentId]);
+
+  // Handle successful password entry
+  const handlePasswordSuccess = async () => {
+    setPasswordRequired(false);
+    setHasAccessPermission(true);
+    setLoading(true);
+    
+    try {
+      if (tournament) {
+        // Load entries and votes after password verification
+        await loadEntriesAndVotes(tournament.id);
+      }
+    } catch (err) {
+      console.error('Error loading data after password verification:', err);
+      setError('Failed to load voting data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleVote = async (entryId: string, rating: number) => {
     if (!user?.id) {
@@ -161,6 +219,17 @@ export default function VotingPage() {
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
       </div>
+    );
+  }
+
+  // Display password prompt if tournament requires a password
+  if (passwordRequired && !hasAccessPermission && tournament) {
+    return (
+      <TournamentPasswordPrompt
+        tournamentId={tournament.id}
+        tournamentName={tournament.name}
+        onPasswordSuccess={handlePasswordSuccess}
+      />
     );
   }
 

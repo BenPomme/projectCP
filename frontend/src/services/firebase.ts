@@ -19,7 +19,8 @@ import {
   limit,
   increment,
   addDoc,
-  Timestamp
+  Timestamp,
+  writeBatch
 } from 'firebase/firestore';
 import {
   ref,
@@ -74,6 +75,8 @@ export interface TournamentState {
   maxEntriesPerUser: number | null; // null means unlimited
   maxVotesPerUser: number | null; // null means unlimited
   votingQuestion: string; // Question to display above the voting scale
+  isPasswordProtected: boolean;
+  password: string | null;
 }
 
 // Auth functions
@@ -702,7 +705,9 @@ export const createTournament = async (
       maxVotesPerUser: null,
       votingQuestion: "How would you rate this entry?",
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      isPasswordProtected: false,
+      password: null
     };
     
     console.log("Tournament data:", tournamentData);
@@ -743,5 +748,152 @@ export const initializeTournamentState = async (): Promise<TournamentState> => {
   } catch (error) {
     console.error('Error initializing tournament state:', error);
     throw error;
+  }
+};
+
+// Delete a tournament and all associated entries and votes
+export const deleteTournament = async (tournamentId: string): Promise<void> => {
+  try {
+    console.log(`Deleting tournament with ID: ${tournamentId}`);
+    
+    // First, check if the current user has permission to delete this tournament
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error('You must be logged in to delete a tournament');
+    }
+    
+    // Get the tournament to check ownership
+    const tournamentRef = doc(db, 'tournaments', tournamentId);
+    const tournamentSnap = await getDoc(tournamentRef);
+    
+    if (!tournamentSnap.exists()) {
+      throw new Error('Tournament not found');
+    }
+    
+    const tournament = tournamentSnap.data();
+    const userData = (await getDoc(doc(db, 'users', user.uid))).data();
+    
+    // Only the tournament owner or an admin can delete it
+    if (tournament.ownerId !== user.uid && !(userData?.isAdmin)) {
+      throw new Error('You do not have permission to delete this tournament');
+    }
+    
+    // 1. Get all entries for this tournament
+    const entries = await getEntriesForTournament(tournamentId);
+    
+    // 2. Get all votes for this tournament
+    const votes = await getTournamentVotes(tournamentId);
+    
+    // Start a batch to delete everything
+    const batch = writeBatch(db);
+    
+    // 3. Delete all votes for the tournament
+    for (const vote of votes) {
+      batch.delete(doc(db, 'votes', vote.id));
+    }
+    
+    // 4. Delete all entries for the tournament
+    for (const entry of entries) {
+      batch.delete(doc(db, 'entries', entry.id));
+      
+      // Delete the image file from storage if it exists
+      if (entry.imageUrl) {
+        try {
+          // Parse the storage path from the URL
+          const urlPath = entry.imageUrl.split('/').slice(3).join('/').split('?')[0];
+          const decodedPath = decodeURIComponent(urlPath);
+          await deleteImage(`entries/${tournamentId}/${entry.userId}/${decodedPath.split('/').pop()}`);
+        } catch (error) {
+          console.error(`Failed to delete image for entry ${entry.id}:`, error);
+          // Continue with deletion even if image deletion fails
+        }
+      }
+    }
+    
+    // 5. Delete the tournament document
+    batch.delete(tournamentRef);
+    
+    // Commit the batch deletion
+    await batch.commit();
+    
+    console.log(`Successfully deleted tournament ${tournamentId} with ${entries.length} entries and ${votes.length} votes`);
+  } catch (error) {
+    console.error('Error deleting tournament:', error);
+    throw error;
+  }
+};
+
+// Update tournament password protection
+export const updateTournamentPassword = async (
+  tournamentId: string, 
+  isPasswordProtected: boolean, 
+  password: string | null
+): Promise<void> => {
+  try {
+    console.log(`Updating password for tournament ${tournamentId}`);
+    
+    // First, check if the current user has permission
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error('You must be logged in to update tournament settings');
+    }
+    
+    // Get the tournament to check ownership
+    const tournamentRef = doc(db, 'tournaments', tournamentId);
+    const tournamentSnap = await getDoc(tournamentRef);
+    
+    if (!tournamentSnap.exists()) {
+      throw new Error('Tournament not found');
+    }
+    
+    const tournament = tournamentSnap.data();
+    const userData = (await getDoc(doc(db, 'users', user.uid))).data();
+    
+    // Only the tournament owner or an admin can update settings
+    if (tournament.ownerId !== user.uid && !(userData?.isAdmin)) {
+      throw new Error('You do not have permission to update this tournament');
+    }
+    
+    // Update the tournament with password settings
+    await updateDoc(tournamentRef, {
+      isPasswordProtected,
+      password: isPasswordProtected ? password : null,
+      updatedAt: Timestamp.now()
+    });
+    
+    console.log(`Successfully updated password protection for tournament ${tournamentId}`);
+  } catch (error) {
+    console.error('Error updating tournament password:', error);
+    throw error;
+  }
+};
+
+// Check if a password is correct for a tournament
+export const checkTournamentPassword = async (
+  tournamentId: string,
+  password: string
+): Promise<boolean> => {
+  try {
+    console.log(`Checking password for tournament ${tournamentId}`);
+    
+    const tournamentRef = doc(db, 'tournaments', tournamentId);
+    const tournamentSnap = await getDoc(tournamentRef);
+    
+    if (!tournamentSnap.exists()) {
+      throw new Error('Tournament not found');
+    }
+    
+    const tournament = tournamentSnap.data();
+    
+    // If tournament is not password protected, return true
+    if (!tournament.isPasswordProtected) {
+      return true;
+    }
+    
+    // Check if the provided password matches
+    return tournament.password === password;
+  } catch (error) {
+    console.error('Error checking tournament password:', error);
+    return false;
   }
 }; 

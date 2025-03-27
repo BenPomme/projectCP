@@ -6,7 +6,9 @@ import {
   updateTournamentState, 
   TournamentState, 
   getEntriesForTournament,
-  getTournamentVotes 
+  getTournamentVotes,
+  deleteTournament,
+  updateTournamentPassword,
 } from '../../services/firebase';
 import { format } from 'date-fns';
 import { db } from '../../config/firebase';
@@ -40,6 +42,15 @@ export default function TournamentSettingsPage() {
     totalUsers: 0,
   });
 
+  // Password protection state
+  const [isPasswordProtected, setIsPasswordProtected] = useState(false);
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Delete tournament state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+
   // Get effective tournament ID
   const effectiveTournamentId = tournamentId || 'current';
 
@@ -60,7 +71,13 @@ export default function TournamentSettingsPage() {
     if (tournament?.votingQuestion !== undefined) {
       setLocalVotingQuestion(tournament.votingQuestion);
     }
-  }, [tournament?.votingQuestion]);
+    if (tournament?.isPasswordProtected !== undefined) {
+      setIsPasswordProtected(tournament.isPasswordProtected);
+      if (tournament.password) {
+        setPassword(tournament.password);
+      }
+    }
+  }, [tournament]);
 
   const fetchTournament = async () => {
     try {
@@ -257,6 +274,61 @@ export default function TournamentSettingsPage() {
     } catch (err: any) {
       console.error('Error updating tournament name:', err);
       setError(err.message || 'Failed to update tournament name');
+    }
+  };
+
+  // Handle password protection change
+  const handlePasswordChange = async () => {
+    try {
+      if (!tournament) return;
+      
+      setError(null);
+      setSuccess(null);
+      
+      // If enabling password protection, ensure there's a password
+      if (isPasswordProtected && !password.trim()) {
+        setError('Please enter a password');
+        return;
+      }
+      
+      await updateTournamentPassword(
+        tournament.id,
+        isPasswordProtected,
+        isPasswordProtected ? password : null
+      );
+      
+      setSuccess('Password protection settings updated successfully');
+      await fetchTournament();
+    } catch (err: any) {
+      console.error('Error updating password protection:', err);
+      setError(err.message || 'Failed to update password protection');
+    }
+  };
+  
+  // Handle tournament deletion
+  const handleDeleteTournament = async () => {
+    try {
+      if (!tournament) return;
+      
+      setError(null);
+      
+      // Confirm deletion with text matching
+      if (deleteConfirmText !== tournament.name) {
+        setError('Please enter the tournament name to confirm deletion');
+        return;
+      }
+      
+      // Show loading state
+      setLoading(true);
+      
+      await deleteTournament(tournament.id);
+      
+      // Navigate back to dashboard after deletion
+      navigate('/dashboard');
+    } catch (err: any) {
+      console.error('Error deleting tournament:', err);
+      setError(err.message || 'Failed to delete tournament');
+      setLoading(false);
     }
   };
 
@@ -500,6 +572,127 @@ export default function TournamentSettingsPage() {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Password Protection */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">Password Protection</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Enable password protection to restrict who can submit entries and vote in your tournament.
+          Users will need to enter the password before they can participate.
+        </p>
+        
+        <div className="flex items-center mb-4">
+          <input
+            type="checkbox"
+            id="passwordProtection"
+            checked={isPasswordProtected}
+            onChange={(e) => setIsPasswordProtected(e.target.checked)}
+            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+          />
+          <label htmlFor="passwordProtection" className="ml-2 block text-sm text-gray-900">
+            Enable password protection
+          </label>
+        </div>
+        
+        {isPasswordProtected && (
+          <div className="mt-2">
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              Tournament Password
+            </label>
+            <div className="mt-1 relative rounded-md shadow-sm">
+              <input
+                type={showPassword ? "text" : "password"}
+                id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md pr-10"
+                placeholder="Enter password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-500"
+              >
+                {showPassword ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                    <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
+                    <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+        
+        <div className="mt-4">
+          <button
+            onClick={handlePasswordChange}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+          >
+            Save Password Settings
+          </button>
+        </div>
+      </div>
+
+      {/* Delete Tournament */}
+      <div className="bg-white rounded-lg shadow-md p-6 border border-red-200">
+        <h2 className="text-xl font-semibold mb-4 text-red-600">Danger Zone</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Permanently delete this tournament and all its data. This action cannot be undone.
+          All entries, votes, and settings will be permanently removed.
+        </p>
+        
+        <div>
+          {!showDeleteConfirm ? (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              Delete Tournament
+            </button>
+          ) : (
+            <div className="border border-red-300 rounded-md p-4 bg-red-50">
+              <p className="text-sm text-red-700 mb-2">
+                To confirm deletion, please type <strong>{tournament.name}</strong> below:
+              </p>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                className="focus:ring-red-500 focus:border-red-500 block w-full sm:text-sm border-gray-300 rounded-md mb-4"
+                placeholder="Enter tournament name to confirm"
+              />
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleDeleteTournament}
+                  disabled={deleteConfirmText !== tournament.name}
+                  className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white ${
+                    deleteConfirmText === tournament.name
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : 'bg-gray-400 cursor-not-allowed'
+                  } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500`}
+                >
+                  Permanently Delete
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteConfirmText('');
+                  }}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getTournamentById, getEntriesForTournament } from '../services/firebase';
 import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
+import TournamentPasswordPrompt from '../components/TournamentPasswordPrompt';
 
 export default function TournamentPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
@@ -12,6 +13,8 @@ export default function TournamentPage() {
   const [entries, setEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [hasAccessPermission, setHasAccessPermission] = useState(false);
 
   useEffect(() => {
     const fetchTournament = async () => {
@@ -38,10 +41,35 @@ export default function TournamentPage() {
         console.log('Tournament data:', tournamentData);
         setTournament(tournamentData);
         
-        // Get entries for this tournament
-        const entriesData = await getEntriesForTournament(tournamentId);
-        console.log(`Found ${entriesData.length} entries for tournament ${tournamentId}`);
-        setEntries(entriesData);
+        // Check if tournament is password protected
+        if (tournamentData.isPasswordProtected) {
+          // Check if user has already provided the password for this tournament
+          const hasAccess = localStorage.getItem(`tournament_access_${tournamentId}`) === 'true';
+          
+          // Check if user is the owner or an admin (they bypass password protection)
+          const isOwnerOrAdmin = user?.id === tournamentData.ownerId || user?.isAdmin;
+          
+          if (hasAccess || isOwnerOrAdmin) {
+            // User has permission to access this tournament
+            setHasAccessPermission(true);
+            
+            // Proceed to load entries
+            const entriesData = await getEntriesForTournament(tournamentId);
+            console.log(`Found ${entriesData.length} entries for tournament ${tournamentId}`);
+            setEntries(entriesData);
+          } else {
+            // Password is required
+            setPasswordRequired(true);
+          }
+        } else {
+          // Tournament is not password protected
+          setHasAccessPermission(true);
+          
+          // Get entries for this tournament
+          const entriesData = await getEntriesForTournament(tournamentId);
+          console.log(`Found ${entriesData.length} entries for tournament ${tournamentId}`);
+          setEntries(entriesData);
+        }
         
       } catch (err: any) {
         console.error('Error fetching tournament:', err);
@@ -52,7 +80,23 @@ export default function TournamentPage() {
     };
 
     fetchTournament();
-  }, [tournamentId]);
+  }, [tournamentId, user]);
+
+  // Handle successful password entry
+  const handlePasswordSuccess = async () => {
+    setPasswordRequired(false);
+    setHasAccessPermission(true);
+    
+    try {
+      // Load entries after password is verified
+      const entriesData = await getEntriesForTournament(tournamentId!);
+      console.log(`Found ${entriesData.length} entries for tournament ${tournamentId}`);
+      setEntries(entriesData);
+    } catch (err: any) {
+      console.error('Error fetching entries:', err);
+      setError('Failed to load entries');
+    }
+  };
 
   if (loading) {
     return (
@@ -90,6 +134,17 @@ export default function TournamentPage() {
 
   if (!tournament) {
     return null;
+  }
+
+  // Display password prompt if tournament requires a password
+  if (passwordRequired && !hasAccessPermission) {
+    return (
+      <TournamentPasswordPrompt
+        tournamentId={tournamentId!}
+        tournamentName={tournament.name}
+        onPasswordSuccess={handlePasswordSuccess}
+      />
+    );
   }
 
   const isUserOwner = user?.id === tournament.ownerId;
