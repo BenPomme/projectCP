@@ -56,15 +56,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           
-      - name: Enable auto-merge for Pull Requests
-        uses: pascalgn/automerge-action@v0.15.6
+      - name: Merge Pull Request
+        run: |
+          PR_URL="${{ steps.create-pr.outputs.pull-request-url }}"
+          if [ -n "$PR_URL" ]; then
+            PR_NUMBER=$(echo $PR_URL | grep -o '[0-9]*$')
+            echo "Merging pull request #$PR_NUMBER"
+            gh pr merge $PR_NUMBER --squash --delete-branch=false
+          else
+            echo "No pull request URL found"
+          fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-          MERGE_LABELS: ""
-          MERGE_METHOD: "squash"
-          MERGE_DELETE_BRANCH: "false"
-          MERGE_COMMIT_MESSAGE: "Merge fix/date-handling into main"
-          PR_BRANCH: "fix/date-handling"
-          PR_TITLE: "Fix date handling in HomePage and firebase service"
-          MERGE_RETRIES: "3"
-          MERGE_RETRY_SLEEP: "10000" 
+          GH_TOKEN: ${{ secrets.GH_PAT }} 
