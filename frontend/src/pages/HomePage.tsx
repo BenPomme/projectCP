@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { Entry, TournamentState, getTournaments, initializeTournamentState, getEntriesForTournament, getAllTournaments, getApprovedEntriesForTournament } from '../services/firebase';
+import { Entry, TournamentState, initializeTournamentState, getEntriesForTournament, getAllTournaments, getApprovedEntriesForTournament } from '../services/firebase';
 import { formatDistanceToNow, format } from 'date-fns';
 import CreateTournamentForm from '../components/CreateTournamentForm';
 
@@ -38,47 +38,16 @@ export default function HomePage() {
           
           const entries = await getApprovedEntriesForTournament(showcaseTournament.id);
           
-          // Force conversion of all entries to a safe format before sorting
-          const entriesWithSafeDates = entries.map(entry => {
-            let safeCreatedAt;
-            try {
-              // Convert any date format to timestamp
-              if (entry.createdAt) {
-                if (typeof entry.createdAt.getTime === 'function') {
-                  // It's a JavaScript Date
-                  safeCreatedAt = entry.createdAt.getTime();
-                } else if (typeof entry.createdAt.toMillis === 'function') {
-                  // It's a Firestore Timestamp
-                  safeCreatedAt = entry.createdAt.toMillis();
-                } else if (typeof entry.createdAt.toDate === 'function') {
-                  // It's a Firestore Timestamp with toDate
-                  safeCreatedAt = entry.createdAt.toDate().getTime();
-                } else if (typeof entry.createdAt === 'number') {
-                  // It's a numeric timestamp
-                  safeCreatedAt = entry.createdAt;
-                } else {
-                  // Try to parse as date string or any other format
-                  safeCreatedAt = new Date(entry.createdAt).getTime();
-                }
-              } else {
-                safeCreatedAt = 0;
-              }
-            } catch (err) {
-              console.error("Error processing date:", err);
-              safeCreatedAt = 0;
-            }
-            
-            // Return a new object with the safe date
-            return {
+          // Extremely simple approach - convert all dates to timestamps before sorting
+          const recentEntries = entries
+            .map(entry => ({
               ...entry,
-              // Keep original for display but add a safe numeric timestamp for sorting
-              _safeSortTimestamp: safeCreatedAt 
-            };
-          });
-          
-          // Sort using the safe timestamp values
-          const recentEntries = entriesWithSafeDates
-            .sort((a, b) => b._safeSortTimestamp - a._safeSortTimestamp)
+              // Add a numeric timestamp for sorting - this avoids any method calls during sort
+              sortTimeStamp: entry.createdAt instanceof Date ? 
+                entry.createdAt.getTime() : 
+                new Date(entry.createdAt).getTime()
+            }))
+            .sort((a, b) => b.sortTimeStamp - a.sortTimeStamp)
             .slice(0, 3);
             
           setShowcaseEntries(recentEntries);

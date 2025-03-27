@@ -6,7 +6,7 @@ import {
   getApprovedEntriesForTournament,
   submitVote, 
   getUserVotesForTournament,
-  getTournaments,
+  getAllTournaments,
   TournamentState,
   TournamentEntry,
   TournamentVote
@@ -40,7 +40,7 @@ export default function VotingPage() {
     const fetchVotingTournaments = async () => {
       try {
         setIsLoading(true);
-        const allTournaments = await getTournaments();
+        const allTournaments = await getAllTournaments();
         
         // Filter to only tournaments in voting phase
         const tournamentsInVotingPhase = allTournaments.filter(

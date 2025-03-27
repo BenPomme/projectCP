@@ -169,17 +169,42 @@ export const getEntriesForTournament = async (tournamentId: string): Promise<Ent
     );
     
     const querySnapshot = await getDocs(entriesQuery);
-    const entries = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: convertTimestampToDate(doc.data().createdAt),
-      updatedAt: convertTimestampToDate(doc.data().updatedAt)
-    }) as Entry);
+    
+    // Simple date fix function
+    const fixDate = (val) => {
+      if (!val) return new Date();
+      
+      try {
+        // If it's a Firebase Timestamp with toDate method
+        if (val.toDate) {
+          return val.toDate();
+        }
+        
+        // If it's already a Date
+        if (val instanceof Date) {
+          return val;
+        }
+        
+        // For any other formats, create a new Date
+        return new Date(val);
+      } catch (e) {
+        console.error("Error converting date:", e);
+        return new Date();
+      }
+    };
+    
+    const entries = querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: fixDate(data.createdAt),
+        updatedAt: fixDate(data.updatedAt)
+      } as Entry;
+    });
     
     // Sort by createdAt descending on the client side
-    entries.sort((a, b) => {
-      return b.createdAt.getTime() - a.createdAt.getTime();
-    });
+    entries.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     
     console.log(`Found ${entries.length} entries for tournament ${tournamentId}`);
     return entries;
@@ -206,10 +231,39 @@ export const getEntries = async (tournamentId?: string): Promise<Entry[]> => {
     // Fallback to all entries - this should be avoided
     const entriesQuery = query(collection(db, 'entries'), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(entriesQuery);
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }) as Entry);
+    
+    // Simple date fix function
+    const fixDate = (val) => {
+      if (!val) return new Date();
+      
+      try {
+        // If it's a Firebase Timestamp with toDate method
+        if (val.toDate) {
+          return val.toDate();
+        }
+        
+        // If it's already a Date
+        if (val instanceof Date) {
+          return val;
+        }
+        
+        // For any other formats, create a new Date
+        return new Date(val);
+      } catch (e) {
+        console.error("Error converting date:", e);
+        return new Date();
+      }
+    };
+    
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: fixDate(data.createdAt),
+        updatedAt: fixDate(data.updatedAt)
+      } as Entry;
+    });
   } catch (error) {
     console.error('Error getting entries:', error);
     return [];
@@ -525,36 +579,58 @@ const convertTimestampToDate = (timestamp: any): Date => {
 };
 
 // Get all tournaments
-export const getTournaments = async (): Promise<TournamentState[]> => {
+export async function getAllTournaments(): Promise<TournamentState[]> {
   try {
-    console.log("Fetching all tournaments...");
-    // Simple query without ordering or filtering that doesn't require a composite index
-    const tournamentsSnapshot = await getDocs(collection(db, 'tournaments'));
+    console.log('Fetching all tournaments...');
+    const tournamentsRef = collection(db, 'tournaments');
+    const tournamentsSnapshot = await getDocs(tournamentsRef);
     
-    const tournaments = tournamentsSnapshot.docs.map(doc => {
+    // Simpler implementation with direct conversion
+    const tournaments = tournamentsSnapshot.docs.map((doc) => {
       const data = doc.data();
+      
+      // Handle dates in a much simpler way - just convert everything to plain JS Date objects
+      const fixDate = (val) => {
+        if (!val) return new Date();
+        
+        try {
+          // If it's a Firebase Timestamp with toDate method
+          if (val.toDate) {
+            return val.toDate();
+          }
+          
+          // If it's already a Date
+          if (val instanceof Date) {
+            return val;
+          }
+          
+          // For any other formats, create a new Date
+          return new Date(val);
+        } catch (e) {
+          console.error("Error converting date:", e);
+          return new Date();
+        }
+      };
+      
       return {
-        ...data,
         id: doc.id,
-        submissionPhaseStart: convertTimestampToDate(data.submissionPhaseStart),
-        submissionPhaseEnd: convertTimestampToDate(data.submissionPhaseEnd),
-        votingPhaseStart: convertTimestampToDate(data.votingPhaseStart),
-        votingPhaseEnd: convertTimestampToDate(data.votingPhaseEnd),
-        createdAt: convertTimestampToDate(data.createdAt),
-        updatedAt: convertTimestampToDate(data.updatedAt),
+        ...data,
+        createdAt: fixDate(data.createdAt),
+        updatedAt: fixDate(data.updatedAt),
+        submissionPhaseStart: fixDate(data.submissionPhaseStart),
+        submissionPhaseEnd: fixDate(data.submissionPhaseEnd),
+        votingPhaseStart: fixDate(data.votingPhaseStart),
+        votingPhaseEnd: fixDate(data.votingPhaseEnd),
       } as TournamentState;
     });
-    
-    // Sort on client side instead of using orderBy in the query
-    tournaments.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     
     console.log(`Found ${tournaments.length} tournaments`);
     return tournaments;
   } catch (error) {
-    console.error('Error getting tournaments:', error);
-    return []; // Return empty array instead of throwing error for a more graceful failure
+    console.error('Error fetching tournaments:', error);
+    throw error;
   }
-};
+}
 
 // Get tournaments owned by a specific user
 export const getUserTournaments = async (userId: string): Promise<TournamentState[]> => {
@@ -627,7 +703,7 @@ export const getTournamentById = async (tournamentId: string): Promise<Tournamen
 export const getTournamentState = async (): Promise<TournamentState | null> => {
   try {
     // First get all tournaments
-    const tournaments = await getTournaments();
+    const tournaments = await getAllTournaments();
     
     // Filter and find active tournaments client-side instead of using complex queries
     const activeTournaments = tournaments.filter(
@@ -925,43 +1001,6 @@ export const checkTournamentPassword = async (
   }
 };
 
-// Helper function to convert any timestamp format to Date safely
-const safelyConvertToDate = (timestamp: any): Date => {
-  try {
-    if (!timestamp) return new Date();
-    
-    if (timestamp instanceof Date) return timestamp;
-    
-    if (typeof timestamp === 'object') {
-      // Check for Firestore Timestamp methods
-      if (typeof timestamp.toDate === 'function') {
-        return timestamp.toDate();
-      }
-      
-      // Some Firestore timestamps might have toMillis instead
-      if (typeof timestamp.toMillis === 'function') {
-        return new Date(timestamp.toMillis());
-      }
-      
-      // Try to create a date from the object
-      return new Date(timestamp);
-    }
-    
-    if (typeof timestamp === 'number') {
-      return new Date(timestamp);
-    }
-    
-    if (typeof timestamp === 'string') {
-      return new Date(timestamp);
-    }
-    
-    return new Date();
-  } catch (err) {
-    console.error("Error converting timestamp to Date:", err);
-    return new Date();
-  }
-};
-
 // Get only approved entries for a specific tournament
 export async function getApprovedEntriesForTournament(tournamentId: string): Promise<TournamentEntry[]> {
   try {
@@ -974,14 +1013,36 @@ export async function getApprovedEntriesForTournament(tournamentId: string): Pro
     );
     const entriesSnapshot = await getDocs(q);
     
+    // Create a simple function to directly fix dates within this function scope
+    const fixDate = (val) => {
+      if (!val) return new Date();
+      
+      try {
+        // If it's a Firebase Timestamp with toDate method
+        if (val.toDate) {
+          return val.toDate();
+        }
+        
+        // If it's already a Date
+        if (val instanceof Date) {
+          return val;
+        }
+        
+        // For any other formats, create a new Date
+        return new Date(val);
+      } catch (e) {
+        console.error("Error converting date:", e);
+        return new Date();
+      }
+    };
+    
     const entries = entriesSnapshot.docs.map((doc) => {
       const data = doc.data();
       return {
         id: doc.id,
         ...data,
-        // Use our safer conversion functions
-        createdAt: safelyConvertToDate(data.createdAt),
-        updatedAt: safelyConvertToDate(data.updatedAt),
+        createdAt: fixDate(data.createdAt),
+        updatedAt: fixDate(data.updatedAt)
       } as TournamentEntry;
     });
     
@@ -989,37 +1050,6 @@ export async function getApprovedEntriesForTournament(tournamentId: string): Pro
     return entries;
   } catch (error) {
     console.error('Error fetching approved entries:', error);
-    throw error;
-  }
-}
-
-// Get all tournaments
-export async function getAllTournaments(): Promise<TournamentState[]> {
-  try {
-    console.log('Fetching all tournaments...');
-    const tournamentsRef = collection(db, 'tournaments');
-    const tournamentsSnapshot = await getDocs(tournamentsRef);
-    
-    const tournaments = tournamentsSnapshot.docs.map((doc) => {
-      const data = doc.data();
-      
-      // Create safer date conversions
-      return {
-        id: doc.id,
-        ...data,
-        createdAt: safelyConvertToDate(data.createdAt),
-        updatedAt: safelyConvertToDate(data.updatedAt),
-        submissionPhaseStart: safelyConvertToDate(data.submissionPhaseStart),
-        submissionPhaseEnd: safelyConvertToDate(data.submissionPhaseEnd),
-        votingPhaseStart: safelyConvertToDate(data.votingPhaseStart),
-        votingPhaseEnd: safelyConvertToDate(data.votingPhaseEnd),
-      } as TournamentState;
-    });
-    
-    console.log(`Found ${tournaments.length} tournaments`);
-    return tournaments;
-  } catch (error) {
-    console.error('Error fetching tournaments:', error);
     throw error;
   }
 } 

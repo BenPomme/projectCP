@@ -240,11 +240,22 @@ export default function DashboardPage() {
                   <div className="mt-4 flex items-center justify-between text-sm">
                     <div className="text-gray-500">
                       Submitted {formatDistanceToNow(
-                        entry.createdAt instanceof Date 
-                          ? entry.createdAt 
-                          : typeof entry.createdAt?.toDate === 'function'
-                            ? entry.createdAt.toDate()
-                            : new Date(entry.createdAt), 
+                        (() => {
+                          try {
+                            if (entry.createdAt instanceof Date) {
+                              return entry.createdAt;
+                            } 
+                            if (typeof entry.createdAt === 'object' && entry.createdAt !== null) {
+                              if (typeof entry.createdAt.toDate === 'function') {
+                                return entry.createdAt.toDate();
+                              }
+                            }
+                            return new Date(entry.createdAt);
+                          } catch (err) {
+                            console.error("Error formatting date:", err);
+                            return new Date();
+                          }
+                        })(),
                         { addSuffix: true }
                       )}
                     </div>
