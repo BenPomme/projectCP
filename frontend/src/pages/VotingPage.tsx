@@ -6,7 +6,8 @@ import {
   getEntriesForTournament, 
   submitVote, 
   getUserVotesForTournament,
-  getTournamentState
+  getTournamentState,
+  getApprovedEntriesForTournament
 } from '../services/firebase';
 import VotingScale from '../components/VotingScale';
 import TournamentPasswordPrompt from '../components/TournamentPasswordPrompt';
@@ -22,138 +23,110 @@ export default function VotingPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [passwordRequired, setPasswordRequired] = React.useState(false);
   const [hasAccessPermission, setHasAccessPermission] = React.useState(false);
+  const [reachedVoteLimit, setReachedVoteLimit] = React.useState(false);
+  const [actualTournamentId, setActualTournamentId] = React.useState<string | null>(null);
+  const [entriesLoading, setEntriesLoading] = React.useState(true);
 
   // Get the actual tournament ID or handle 'current' specially
   const effectiveTournamentId = tournamentId || 'current';
 
   const fetchData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-      console.log(`Fetching tournament state and entries for tournament ${effectiveTournamentId}...`);
-      
-      // Handle 'current' by fetching the active tournament
-      let actualTournamentId = effectiveTournamentId;
-      let tournamentData;
-      
-      if (effectiveTournamentId === 'current') {
-        console.log('Fetching active tournament...');
-        tournamentData = await getTournamentState();
-        
-        if (!tournamentData) {
-          setError('No active tournament found. Please select a specific tournament.');
-          setLoading(false);
-          return;
-        }
-        
-        actualTournamentId = tournamentData.id;
-        console.log(`Found active tournament: ${tournamentData.name} (ID: ${actualTournamentId})`);
-      } else {
-        // Fetch specific tournament data
-        tournamentData = await getTournamentById(effectiveTournamentId);
+      if (!actualTournamentId) {
+        setError('Tournament ID is required');
+        return;
       }
+
+      // Get tournament details
+      const tournamentData = await getTournamentById(actualTournamentId);
       
       if (!tournamentData) {
-        setError(`Tournament not found. Please go back to the home page and select an active tournament.`);
-        setLoading(false);
+        setError('Tournament not found');
         return;
       }
       
-      console.log("Tournament state:", tournamentData);
-      console.log("Voting question from tournament:", tournamentData?.votingQuestion);
       setTournament(tournamentData);
       
-      // Check if tournament is in voting phase
+      // Check if voting is allowed in this tournament's current phase
       if (tournamentData.currentPhase !== 'voting') {
-        setError(`This tournament is currently in the ${tournamentData.currentPhase} phase and is not accepting votes.`);
-        setLoading(false);
+        setError('This tournament is not currently in the voting phase');
         return;
       }
       
       // Check if tournament is password protected
       if (tournamentData.isPasswordProtected) {
-        // Check if user has already provided the password for this tournament
-        const hasAccess = localStorage.getItem(`tournament_access_${actualTournamentId}`) === 'true';
-        
         // Check if user is the owner or an admin (they bypass password protection)
-        const isOwnerOrAdmin = user?.id === tournamentData.ownerId || user?.isAdmin;
+        const isOwnerOrAdmin = user?.id === tournamentData.ownerId || user?.isAdmin === true;
         
-        if (hasAccess || isOwnerOrAdmin) {
-          // User has permission to access this tournament
-          setHasAccessPermission(true);
+        if (!isOwnerOrAdmin) {
+          // Check if user has already provided the password for this tournament
+          const hasAccess = localStorage.getItem(`tournament_access_${actualTournamentId}_${user?.id}`);
           
-          // Proceed to load entries and votes
-          await loadEntriesAndVotes(actualTournamentId);
-        } else {
-          // Password is required
-          setPasswordRequired(true);
-          setLoading(false);
-          return;
+          if (!hasAccess) {
+            setPasswordRequired(true);
+            return;
+          }
         }
-      } else {
-        // Tournament is not password protected
-        setHasAccessPermission(true);
-        
-        // Load entries and votes
-        await loadEntriesAndVotes(actualTournamentId);
       }
-    } catch (err) {
-      setError('Failed to load voting data');
-      console.error('Error fetching data:', err);
+      
+      setHasAccessPermission(true);
+      
+      // Load entries and user votes
+      await loadEntriesAndVotes();
+    } catch (err: any) {
+      console.error('Error fetching tournament data:', err);
+      setError(err.message || 'Failed to load tournament data');
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper function to load entries and votes
-  const loadEntriesAndVotes = async (tournamentId: string) => {
+  // Load entries and user votes
+  const loadEntriesAndVotes = async () => {
     try {
-      // Get entries
-      const entriesData = await getEntriesForTournament(tournamentId);
-      console.log(`Found ${entriesData.length} entries for tournament ${tournamentId}`);
-      setEntries(entriesData);
+      setEntriesLoading(true);
       
-      if (user?.id) {
-        // Get user votes
-        const votesData = await getUserVotesForTournament(user.id, tournamentId);
-        console.log(`Found ${Object.keys(votesData).length} votes for user ${user.id} in tournament ${tournamentId}`);
-        setUserVotes(votesData);
-
+      // Get approved entries for this tournament
+      const entriesData = await getApprovedEntriesForTournament(actualTournamentId!);
+      console.log(`Found ${entriesData.length} approved entries for tournament ${actualTournamentId}`);
+      
+      // Get user votes for this tournament
+      if (user) {
+        const userVotesData = await getUserVotesForTournament(actualTournamentId!, user.id);
+        console.log(`Found ${userVotesData.length} votes by user for tournament ${actualTournamentId}`);
+        setUserVotes(userVotesData);
+        
         // Check if user has reached vote limit
-        if (tournament?.maxVotesPerUser !== null && tournament?.maxVotesPerUser !== undefined) {
-          const voteCount = Object.keys(votesData).length;
-          if (voteCount >= tournament.maxVotesPerUser) {
-            setError(`You have reached the maximum number of votes (${tournament.maxVotesPerUser}) for this tournament`);
-          }
+        if (tournament?.maxVotesPerUser !== null && userVotesData.length >= tournament.maxVotesPerUser) {
+          setReachedVoteLimit(true);
         }
       }
-    } catch (err) {
+      
+      // Create a shuffled copy of entries for voting
+      const shuffledEntries = [...entriesData].sort(() => Math.random() - 0.5);
+      setEntries(shuffledEntries);
+    } catch (err: any) {
       console.error('Error loading entries and votes:', err);
-      throw err;
+      setError(err.message || 'Failed to load entries');
+    } finally {
+      setEntriesLoading(false);
     }
   };
 
   React.useEffect(() => {
-    fetchData();
-  }, [user?.id, effectiveTournamentId]);
+    if (user) {
+      fetchData();
+    }
+  }, [actualTournamentId, user]);
 
   // Handle successful password entry
   const handlePasswordSuccess = async () => {
     setPasswordRequired(false);
     setHasAccessPermission(true);
-    setLoading(true);
     
-    try {
-      if (tournament) {
-        // Load entries and votes after password verification
-        await loadEntriesAndVotes(tournament.id);
-      }
-    } catch (err) {
-      console.error('Error loading data after password verification:', err);
-      setError('Failed to load voting data');
-    } finally {
-      setLoading(false);
-    }
+    // Load entries and votes after password verification
+    await loadEntriesAndVotes();
   };
 
   const handleVote = async (entryId: string, rating: number) => {

@@ -79,6 +79,30 @@ export interface TournamentState {
   password: string | null;
 }
 
+export interface TournamentEntry {
+  id: string;
+  title: string;
+  description?: string;
+  imageUrl: string;
+  userId: string;
+  authorName?: string;
+  tournamentId: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: Date;
+  updatedAt: Date;
+  voteCount?: number;
+  averageRating?: number;
+}
+
+export interface TournamentVote {
+  id: string;
+  userId: string;
+  entryId: string;
+  tournamentId: string;
+  rating: number;
+  createdAt: Date;
+}
+
 // Auth functions
 export const register = async (email: string, password: string): Promise<User> => {
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -193,33 +217,32 @@ export const getEntries = async (tournamentId?: string): Promise<Entry[]> => {
 };
 
 // Get entries submitted by a specific user for a specific tournament
-export const getUserEntriesForTournament = async (userId: string, tournamentId: string): Promise<Entry[]> => {
+export const getUserEntriesForTournament = async (tournamentId: string, userId: string): Promise<Entry[]> => {
   try {
     console.log(`Fetching entries for user ${userId} in tournament ${tournamentId}...`);
-    // Using a simple query without complex conditions to avoid index issues
-    const entriesQuery = query(
-      collection(db, 'entries'),
+    const entriesRef = collection(db, 'entries');
+    const q = query(
+      entriesRef, 
+      where('tournamentId', '==', tournamentId),
       where('userId', '==', userId)
     );
-    const querySnapshot = await getDocs(entriesQuery);
+    const entriesSnapshot = await getDocs(q);
     
-    // Filter by tournamentId client-side
-    const entries = querySnapshot.docs
-      .map(doc => ({
+    const entries = entriesSnapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
         id: doc.id,
-        ...doc.data()
-      }) as Entry)
-      .filter(entry => entry.tournamentId === tournamentId);
-      
+        ...data,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
+      } as Entry;
+    });
+    
     console.log(`Found ${entries.length} entries for user ${userId} in tournament ${tournamentId}`);
-    
-    // Sort by creation date on client side
-    entries.sort((a, b) => b.createdAt.toDate().getTime() - a.createdAt.toDate().getTime());
-    
     return entries;
   } catch (error) {
-    console.error(`Error getting entries for user ${userId} in tournament ${tournamentId}:`, error);
-    return [];
+    console.error('Error fetching user entries:', error);
+    throw error;
   }
 };
 
@@ -385,33 +408,34 @@ export const getTournamentVotes = async (tournamentId: string): Promise<Vote[]> 
   }
 };
 
-// Get votes by a user for a specific tournament
-export const getUserVotesForTournament = async (userId: string, tournamentId: string): Promise<Record<string, number>> => {
+// Get votes from a specific user for a specific tournament
+export async function getUserVotesForTournament(tournamentId: string, userId: string): Promise<TournamentVote[]> {
   try {
     console.log(`Fetching votes for user ${userId} in tournament ${tournamentId}...`);
-    // Using a simple query with just userId to avoid index issues
-    const votesQuery = query(
-      collection(db, 'votes'),
+    const votesRef = collection(db, 'votes');
+    const q = query(
+      votesRef, 
+      where('tournamentId', '==', tournamentId),
       where('userId', '==', userId)
     );
-    const querySnapshot = await getDocs(votesQuery);
+    const votesSnapshot = await getDocs(q);
     
-    const votesMap: Record<string, number> = {};
-    querySnapshot.docs.forEach(doc => {
+    const votes = votesSnapshot.docs.map((doc) => {
       const data = doc.data();
-      // Filter by tournamentId client-side
-      if (data.tournamentId === tournamentId) {
-        votesMap[data.entryId] = data.rating;
-      }
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
+      } as TournamentVote;
     });
     
-    console.log(`Found ${Object.keys(votesMap).length} votes for user ${userId} in tournament ${tournamentId}`);
-    return votesMap;
+    console.log(`Found ${votes.length} votes by user for tournament ${tournamentId}`);
+    return votes;
   } catch (error) {
-    console.error(`Error getting votes for user ${userId} in tournament ${tournamentId}:`, error);
-    return {};
+    console.error('Error fetching user votes:', error);
+    throw error;
   }
-};
+}
 
 export const submitVote = async (entryId: string, rating: number, tournamentId: string): Promise<void> => {
   try {
@@ -896,4 +920,89 @@ export const checkTournamentPassword = async (
     console.error('Error checking tournament password:', error);
     return false;
   }
-}; 
+};
+
+// Get entries for a specific tournament
+export async function getEntriesForTournament(tournamentId: string): Promise<TournamentEntry[]> {
+  try {
+    console.log(`Fetching entries for tournament ${tournamentId}...`);
+    const entriesRef = collection(db, 'entries');
+    const q = query(entriesRef, where('tournamentId', '==', tournamentId));
+    const entriesSnapshot = await getDocs(q);
+    
+    const entries = entriesSnapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
+      } as TournamentEntry;
+    });
+    
+    console.log(`Found ${entries.length} entries for tournament ${tournamentId}`);
+    return entries;
+  } catch (error) {
+    console.error('Error fetching entries:', error);
+    throw error;
+  }
+}
+
+// Get only approved entries for a specific tournament
+export async function getApprovedEntriesForTournament(tournamentId: string): Promise<TournamentEntry[]> {
+  try {
+    console.log(`Fetching approved entries for tournament ${tournamentId}...`);
+    const entriesRef = collection(db, 'entries');
+    const q = query(
+      entriesRef, 
+      where('tournamentId', '==', tournamentId),
+      where('status', '==', 'approved')
+    );
+    const entriesSnapshot = await getDocs(q);
+    
+    const entries = entriesSnapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
+      } as TournamentEntry;
+    });
+    
+    console.log(`Found ${entries.length} approved entries for tournament ${tournamentId}`);
+    return entries;
+  } catch (error) {
+    console.error('Error fetching approved entries:', error);
+    throw error;
+  }
+}
+
+// Get all tournaments
+export async function getAllTournaments(): Promise<TournamentState[]> {
+  try {
+    console.log('Fetching all tournaments...');
+    const tournamentsRef = collection(db, 'tournaments');
+    const tournamentsSnapshot = await getDocs(tournamentsRef);
+    
+    const tournaments = tournamentsSnapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
+        submissionPhaseStart: data.submissionPhaseStart instanceof Timestamp ? data.submissionPhaseStart.toDate() : data.submissionPhaseStart,
+        submissionPhaseEnd: data.submissionPhaseEnd instanceof Timestamp ? data.submissionPhaseEnd.toDate() : data.submissionPhaseEnd,
+        votingPhaseStart: data.votingPhaseStart instanceof Timestamp ? data.votingPhaseStart.toDate() : data.votingPhaseStart,
+        votingPhaseEnd: data.votingPhaseEnd instanceof Timestamp ? data.votingPhaseEnd.toDate() : data.votingPhaseEnd,
+      } as TournamentState;
+    });
+    
+    console.log(`Found ${tournaments.length} tournaments`);
+    return tournaments;
+  } catch (error) {
+    console.error('Error fetching tournaments:', error);
+    throw error;
+  }
+} 

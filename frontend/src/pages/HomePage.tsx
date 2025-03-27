@@ -1,66 +1,60 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { Entry, TournamentState, getTournaments, initializeTournamentState, getEntriesForTournament } from '../services/firebase';
-import { formatDistanceToNow } from 'date-fns';
+import { Entry, TournamentState, getTournaments, initializeTournamentState, getEntriesForTournament, getAllTournaments, getApprovedEntriesForTournament } from '../services/firebase';
+import { formatDistanceToNow, format } from 'date-fns';
 import CreateTournamentForm from '../components/CreateTournamentForm';
 
 export default function HomePage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [tournaments, setTournaments] = useState<TournamentState[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showcaseEntries, setShowcaseEntries] = useState<TournamentEntry[]>([]);
+  const [showcaseLoading, setShowcaseLoading] = useState(true);
+  
+  // Separate active and closed tournaments
+  const activeTournaments = tournaments.filter(t => t.currentPhase !== 'completed');
+  const closedTournaments = tournaments.filter(t => t.currentPhase === 'completed');
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchTournaments = async () => {
+      console.log('Fetching tournaments for HomePage...');
+      setLoading(true);
+      
       try {
-        setLoading(true);
-        setError(null);
-        
-        // Fetch tournaments
-        console.log("Fetching tournaments for HomePage...");
-        const tournamentsData = await getTournaments();
+        const tournamentsData = await getAllTournaments();
         setTournaments(tournamentsData);
         
-        // If no tournaments, create a default one
-        if (tournamentsData.length === 0) {
-          console.log("No tournaments found, initializing default tournament...");
-          await initializeTournamentState();
-          const updatedTournaments = await getTournaments();
-          setTournaments(updatedTournaments);
-        }
-
-        // Only fetch entries if we have tournaments
-        if (tournamentsData.length > 0) {
-          // Find a tournament in submission or voting phase to showcase entries from
-          const showcaseTournament = tournamentsData.find(t => 
-            t.currentPhase === 'submission' || t.currentPhase === 'voting'
-          );
+        // Find a tournament to showcase (prefer first active tournament, or first closed one if no active ones)
+        const showcaseTournament = tournamentsData.find(t => t.currentPhase !== 'completed') || 
+                                  tournamentsData[0];
+        
+        if (showcaseTournament) {
+          console.log(`Fetching recent entries for showcase tournament ${showcaseTournament.id}...`);
           
-          if (showcaseTournament) {
-            console.log(`Fetching recent entries for showcase tournament ${showcaseTournament.id}...`);
-            const entriesData = await getEntriesForTournament(showcaseTournament.id);
-            // Limit to 6 entries
-            setEntries(entriesData.slice(0, 6));
-          }
+          const entries = await getApprovedEntriesForTournament(showcaseTournament.id);
+          // Sort by creation date descending and take the first 3
+          const recentEntries = entries
+            .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis())
+            .slice(0, 3);
+            
+          setShowcaseEntries(recentEntries);
         }
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setError('Failed to load tournaments. Please try refreshing the page.');
+      } catch (err: any) {
+        console.error('Error fetching tournaments:', err);
+        setError('Failed to load tournaments');
       } finally {
         setLoading(false);
+        setShowcaseLoading(false);
       }
     };
-
-    fetchData();
+    
+    fetchTournaments();
   }, []);
-
-  // Get active tournaments (in submission or voting phase)
-  const activeTournaments = tournaments.filter(t => 
-    t.currentPhase === 'submission' || t.currentPhase === 'voting' || t.currentPhase === 'completed'
-  );
 
   if (loading) {
     return (
@@ -97,102 +91,113 @@ export default function HomePage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      {user?.isAdmin && (
-        <div className="mb-8 bg-white shadow rounded-lg p-4">
-          <h2 className="text-lg font-medium text-gray-900 mb-2">Admin Quick Links</h2>
-          <div className="flex space-x-4">
-            <Link
-              to="/admin"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
-            >
-              Admin Dashboard
-            </Link>
-            <Link
-              to="/admin/entries"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
-            >
-              Manage Entries
-            </Link>
-            <Link
-              to="/admin/settings"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
-            >
-              Tournament Settings
-            </Link>
-          </div>
-        </div>
-      )}
-      
+    <div className="container mx-auto px-4 py-8">
       <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold text-gray-900 sm:text-5xl md:text-6xl">
-          King Ideation Tournament Platform
-        </h1>
-        <p className="mt-3 max-w-md mx-auto text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
-          {!user ? (
-            <>
-              Start by creating an account and then you can submit your designs or create your own tournament.
-            </>
-          ) : (
-            <>
-              Join an existing tournament or create your own.
-            </>
-          )}
+        <h1 className="text-4xl font-extrabold text-gray-900 mb-4">Welcome to Design Tournament</h1>
+        <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          Create tournaments, submit your best designs, and vote for your favorites.
         </p>
-        {!user ? (
-          <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
-            <div className="rounded-md shadow">
-              <Link
-                to="/register"
-                className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 md:py-4 md:text-lg md:px-10"
-              >
-                Get Started
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
+        
+        {user && (
+          <div className="mt-8">
             <button
-              onClick={() => setShowCreateForm(!showCreateForm)}
-              className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 md:py-4 md:text-lg md:px-10"
+              onClick={() => navigate('/create-tournament')}
+              className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700"
             >
-              {showCreateForm ? 'Hide Form' : 'Create Your Tournament'}
+              Create New Tournament
             </button>
           </div>
         )}
       </div>
-
-      {/* Tournament Creation Form */}
-      {showCreateForm && user && (
+      
+      {/* Showcase section */}
+      {showcaseEntries.length > 0 && (
         <div className="mb-12">
-          <CreateTournamentForm />
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Featured Designs</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {showcaseEntries.map(entry => (
+              <div key={entry.id} className="bg-white overflow-hidden shadow rounded-lg">
+                <img 
+                  src={entry.imageUrl} 
+                  alt={entry.title} 
+                  className="w-full h-48 object-cover"
+                />
+                <div className="p-4">
+                  <h3 className="font-semibold text-lg mb-1">{entry.title}</h3>
+                  <p className="text-gray-600 text-sm mb-2">By {entry.authorName || 'Anonymous'}</p>
+                  <p className="text-gray-500 text-sm">{entry.description?.substring(0, 100)}...</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Active Tournaments */}
-      {activeTournaments.length > 0 && (
-        <div className="mb-12">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Active Tournaments</h2>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Active Tournaments Section */}
+      <div className="mb-12">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Active Tournaments</h2>
+        
+        {loading ? (
+          <div className="animate-pulse">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="bg-gray-200 h-32 rounded-lg mb-4"></div>
+            ))}
+          </div>
+        ) : error ? (
+          <div className="bg-red-50 border-l-4 border-red-400 p-4">
+            <div className="flex">
+              <div className="ml-3">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
+          </div>
+        ) : activeTournaments.length === 0 ? (
+          <div className="bg-white overflow-hidden shadow rounded-lg p-6 text-center">
+            <p className="text-gray-600">No active tournaments found.</p>
+            {user && (
+              <button
+                onClick={() => navigate('/create-tournament')}
+                className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+              >
+                Create Tournament
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {activeTournaments.map((tournament) => (
               <div key={tournament.id} className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <h3 className="text-lg font-medium text-gray-900">{tournament.name}</h3>
+                <div className="p-5">
+                  <div className="flex justify-between items-start">
+                    <h3 className="text-lg font-semibold text-gray-900">{tournament.name}</h3>
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      tournament.currentPhase === 'submission' 
+                        ? 'bg-blue-100 text-blue-800' 
+                        : tournament.currentPhase === 'voting'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {tournament.currentPhase === 'submission' ? 'Submission' : 
+                       tournament.currentPhase === 'voting' ? 'Voting' : 'Completed'}
+                    </span>
+                  </div>
                   
-                  <div className="mt-4 flex flex-col space-y-2">
-                    <div className="text-sm text-gray-500">
-                      Phase: <span className="font-medium capitalize">{tournament.currentPhase}</span>
-                    </div>
-                    
+                  <p className="mt-2 text-sm text-gray-600 line-clamp-2">
+                    {tournament.description || 'No description provided.'}
+                  </p>
+                  
+                  <div className="mt-4 text-sm text-gray-500 space-y-1">
                     {tournament.currentPhase === 'submission' && (
-                      <div className="text-sm text-gray-500">
-                        Submission ends: <span className="font-medium">{formatDistanceToNow(tournament.submissionPhaseEnd, { addSuffix: true })}</span>
+                      <div>
+                        <span>Submission ends: </span>
+                        <span>{format(tournament.submissionPhaseEnd, 'PPP')}</span>
                       </div>
                     )}
                     
                     {tournament.currentPhase === 'voting' && (
-                      <div className="text-sm text-gray-500">
-                        Voting ends: <span className="font-medium">{formatDistanceToNow(tournament.votingPhaseEnd, { addSuffix: true })}</span>
+                      <div>
+                        <span>Voting ends: </span>
+                        <span>{format(tournament.votingPhaseEnd, 'PPP')}</span>
                       </div>
                     )}
                   </div>
@@ -216,16 +221,14 @@ export default function HomePage() {
                       </Link>
                     )}
                     
-                    {tournament.currentPhase === 'completed' && (
-                      <Link
-                        to={`/tournament/${tournament.id}/results`}
-                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
-                      >
-                        View Results
-                      </Link>
-                    )}
+                    <Link
+                      to={`/tournament/${tournament.id}`}
+                      className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                      View Details
+                    </Link>
                     
-                    {(tournament.ownerId === user?.id || user?.isAdmin) && (
+                    {(tournament.ownerId === user?.id) && (
                       <Link
                         to={`/admin/tournament/${tournament.id}/settings`}
                         className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
@@ -238,54 +241,76 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Recent Entries */}
-      {entries.length > 0 && (
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Recent Entries</h2>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {entries.map((entry) => (
-              <div
-                key={entry.id}
-                className="bg-white overflow-hidden shadow rounded-lg"
-              >
-                {entry.imageUrl && (
-                  <img
-                    src={entry.imageUrl}
-                    alt={entry.title}
-                    className="w-full h-48 object-cover"
-                  />
-                )}
-                <div className="px-4 py-5 sm:p-6">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    {entry.title}
-                  </h3>
-                  {entry.description && (
-                    <p className="mt-2 text-sm text-gray-500">
-                      {entry.description}
-                    </p>
-                  )}
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="text-sm text-gray-500">
-                      {entry.voteCount || 0} votes
+        )}
+      </div>
+      
+      {/* Closed Tournaments Section */}
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Closed Tournaments</h2>
+        
+        {loading ? (
+          <div className="animate-pulse">
+            {[...Array(2)].map((_, i) => (
+              <div key={i} className="bg-gray-200 h-32 rounded-lg mb-4"></div>
+            ))}
+          </div>
+        ) : closedTournaments.length === 0 ? (
+          <div className="bg-white overflow-hidden shadow rounded-lg p-6 text-center">
+            <p className="text-gray-600">No closed tournaments found.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {closedTournaments.map((tournament) => (
+              <div key={tournament.id} className="bg-white overflow-hidden shadow rounded-lg">
+                <div className="p-5">
+                  <div className="flex justify-between items-start">
+                    <h3 className="text-lg font-semibold text-gray-900">{tournament.name}</h3>
+                    <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
+                      Completed
+                    </span>
+                  </div>
+                  
+                  <p className="mt-2 text-sm text-gray-600 line-clamp-2">
+                    {tournament.description || 'No description provided.'}
+                  </p>
+                  
+                  <div className="mt-4 text-sm text-gray-500 space-y-1">
+                    <div>
+                      <span>Completed on: </span>
+                      <span>{format(tournament.votingPhaseEnd, 'PPP')}</span>
                     </div>
-                    <div className="text-sm text-gray-500">
-                      Submitted {formatDistanceToNow(
-                        entry.createdAt instanceof Date 
-                          ? entry.createdAt 
-                          : entry.createdAt.toDate(), 
-                        { addSuffix: true }
-                      )}
-                    </div>
+                  </div>
+                  
+                  <div className="mt-6 flex space-x-3">
+                    <Link
+                      to={`/tournament/${tournament.id}/results`}
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+                    >
+                      View Results
+                    </Link>
+                    
+                    <Link
+                      to={`/tournament/${tournament.id}`}
+                      className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                      View Details
+                    </Link>
+                    
+                    {(tournament.ownerId === user?.id) && (
+                      <Link
+                        to={`/admin/tournament/${tournament.id}/settings`}
+                        className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                      >
+                        Manage
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 } 

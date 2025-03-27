@@ -13,6 +13,7 @@ import {
 import { format } from 'date-fns';
 import { db } from '../../config/firebase';
 import { collection, query, getDocs, Timestamp } from 'firebase/firestore';
+import TournamentPasswordPrompt from '../../components/TournamentPasswordPrompt';
 
 interface Stats {
   totalEntries: number;
@@ -51,21 +52,27 @@ export default function TournamentSettingsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
-  // Get effective tournament ID
-  const effectiveTournamentId = tournamentId || 'current';
+  // Password access state
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [hasAccessPermission, setHasAccessPermission] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        if (!tournamentId) {
+          setError('No tournament ID provided');
+          return;
+        }
         await fetchTournament();
         await fetchStats();
       } catch (err: any) {
+        console.error('Error fetching data:', err);
         setError(err.message || 'An error occurred while fetching data');
       }
     };
 
     fetchData();
-  }, [effectiveTournamentId]);
+  }, [tournamentId, user]);
 
   useEffect(() => {
     if (tournament?.votingQuestion !== undefined) {
@@ -82,7 +89,12 @@ export default function TournamentSettingsPage() {
   const fetchTournament = async () => {
     try {
       setLoading(true);
-      const tournamentData = await getTournamentById(effectiveTournamentId);
+      if (!tournamentId) {
+        setError('No tournament ID provided');
+        return;
+      }
+
+      const tournamentData = await getTournamentById(tournamentId);
       
       if (!tournamentData) {
         setError('Tournament not found');
@@ -92,19 +104,24 @@ export default function TournamentSettingsPage() {
       console.log('Current user:', user);
       console.log('Tournament ownerId:', tournamentData.ownerId);
       console.log('User ID matches owner?', tournamentData.ownerId === user?.id);
-      console.log('User is admin?', user?.isAdmin);
+      console.log('User is admin?', user?.isAdmin === true);
       
-      // Check if user is allowed to edit this tournament
-      if (user?.isAdmin === false && tournamentData.ownerId !== user?.id) {
-        console.error('Permission denied - user is not admin and not the owner');
-        setError('You do not have permission to edit this tournament');
-        return;
+      // Only check permissions if user data is available
+      if (user) {
+        // Check if user is the owner - only owners can modify tournament settings
+        const isOwner = user.id === tournamentData.ownerId;
+        
+        if (!isOwner) {
+          setError('You do not have permission to access this tournament settings. Only the tournament creator can modify settings.');
+          return;
+        }
       }
       
       setTournament(tournamentData);
+      setHasAccessPermission(true);
     } catch (err: any) {
       console.error('Error fetching tournament:', err);
-      setError(err.message || 'Failed to fetch tournament');
+      setError('Failed to load tournament data');
     } finally {
       setLoading(false);
     }
@@ -112,19 +129,19 @@ export default function TournamentSettingsPage() {
 
   const fetchStats = async () => {
     try {
-      if (!effectiveTournamentId) return;
+      if (!tournamentId) return;
       
       setStatsLoading(true);
       
       // Get entries stats for this tournament
-      const entries = await getEntriesForTournament(effectiveTournamentId);
+      const entries = await getEntriesForTournament(tournamentId);
       
       const pendingEntries = entries.filter(entry => entry.status === 'pending' || !entry.status).length;
       const approvedEntries = entries.filter(entry => entry.status === 'approved').length;
       const rejectedEntries = entries.filter(entry => entry.status === 'rejected').length;
       
       // Get votes stats for this tournament
-      const votes = await getTournamentVotes(effectiveTournamentId);
+      const votes = await getTournamentVotes(tournamentId);
       
       // Get users stats (independent of tournament)
       const usersQuery = query(collection(db, 'users'));
@@ -332,6 +349,12 @@ export default function TournamentSettingsPage() {
     }
   };
 
+  // Handle successful password entry
+  const handlePasswordSuccess = () => {
+    setPasswordRequired(false);
+    setHasAccessPermission(true);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -340,19 +363,44 @@ export default function TournamentSettingsPage() {
     );
   }
 
-  if (!tournament) {
+  if (error) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
-          <p className="text-red-700">{error || 'Tournament not found'}</p>
-          <button 
-            className="mt-4 text-primary-600 hover:text-primary-700"
-            onClick={() => navigate('/')}
-          >
-            Return to Home
-          </button>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="bg-red-50 border-l-4 border-red-400 p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          </div>
         </div>
+        
+        <button 
+          className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+          onClick={() => navigate('/')}
+        >
+          Return to Home
+        </button>
       </div>
+    );
+  }
+
+  if (!tournament) {
+    return null;
+  }
+
+  // Display password prompt if tournament requires a password
+  if (passwordRequired && !hasAccessPermission) {
+    return (
+      <TournamentPasswordPrompt
+        tournamentId={tournamentId!}
+        tournamentName={tournament.name}
+        onPasswordSuccess={handlePasswordSuccess}
+      />
     );
   }
 

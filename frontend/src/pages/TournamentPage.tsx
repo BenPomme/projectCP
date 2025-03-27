@@ -18,83 +18,68 @@ export default function TournamentPage() {
 
   useEffect(() => {
     const fetchTournament = async () => {
-      if (!tournamentId) {
-        setError('Tournament ID is required');
-        setLoading(false);
-        return;
-      }
-
       try {
         setLoading(true);
-        setError(null);
-        console.log(`Fetching tournament with ID: ${tournamentId}`);
+        if (!tournamentId) {
+          console.error('No tournament ID provided');
+          return;
+        }
+
+        const data = await getTournamentById(tournamentId);
+        console.log('Tournament found:', data);
         
-        // Get tournament details
-        const tournamentData = await getTournamentById(tournamentId);
-        
-        if (!tournamentData) {
-          setError('Tournament not found');
-          setLoading(false);
+        if (!data) {
+          console.error('Tournament not found');
           return;
         }
         
-        console.log('Tournament data:', tournamentData);
-        setTournament(tournamentData);
+        setTournament(data);
         
-        // Check if tournament is password protected
-        if (tournamentData.isPasswordProtected) {
-          // Check if user has already provided the password for this tournament
-          const hasAccess = localStorage.getItem(`tournament_access_${tournamentId}`) === 'true';
+        // Check if this tournament is password protected
+        if (data.isPasswordProtected) {
+          // If user is the owner or an admin, they can bypass the password
+          const isOwnerOrAdmin = user?.id === data.ownerId || user?.isAdmin === true;
           
-          // Check if user is the owner or an admin (they bypass password protection)
-          const isOwnerOrAdmin = user?.id === tournamentData.ownerId || user?.isAdmin;
-          
-          if (hasAccess || isOwnerOrAdmin) {
-            // User has permission to access this tournament
-            setHasAccessPermission(true);
+          if (!isOwnerOrAdmin) {
+            // Check if this user has already entered the password for this tournament
+            const hasAccess = localStorage.getItem(`tournament_access_${tournamentId}_${user?.id}`);
             
-            // Proceed to load entries
-            const entriesData = await getEntriesForTournament(tournamentId);
-            console.log(`Found ${entriesData.length} entries for tournament ${tournamentId}`);
-            setEntries(entriesData);
-          } else {
-            // Password is required
-            setPasswordRequired(true);
+            if (!hasAccess) {
+              setPasswordRequired(true);
+              return;
+            }
           }
-        } else {
-          // Tournament is not password protected
-          setHasAccessPermission(true);
-          
-          // Get entries for this tournament
-          const entriesData = await getEntriesForTournament(tournamentId);
-          console.log(`Found ${entriesData.length} entries for tournament ${tournamentId}`);
-          setEntries(entriesData);
         }
         
-      } catch (err: any) {
-        console.error('Error fetching tournament:', err);
-        setError('Failed to load tournament data');
+        setHasAccessPermission(true);
+        
+        if (data.currentPhase === 'completed') {
+          fetchResults();
+        } else {
+          fetchEntries();
+        }
+      } catch (error) {
+        console.error('Error fetching tournament:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchTournament();
+    if (tournamentId) {
+      fetchTournament();
+    }
   }, [tournamentId, user]);
 
-  // Handle successful password entry
-  const handlePasswordSuccess = async () => {
+  // Handle successful password submission
+  const handlePasswordSuccess = () => {
     setPasswordRequired(false);
     setHasAccessPermission(true);
     
-    try {
-      // Load entries after password is verified
-      const entriesData = await getEntriesForTournament(tournamentId!);
-      console.log(`Found ${entriesData.length} entries for tournament ${tournamentId}`);
-      setEntries(entriesData);
-    } catch (err: any) {
-      console.error('Error fetching entries:', err);
-      setError('Failed to load entries');
+    // Now fetch the entries since we have access
+    if (tournament?.currentPhase === 'completed') {
+      fetchResults();
+    } else {
+      fetchEntries();
     }
   };
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { checkTournamentPassword } from '../services/firebase';
+import { useAuth } from '../hooks/useAuth';
 
 interface TournamentPasswordPromptProps {
   tournamentId: string;
@@ -12,16 +13,23 @@ export default function TournamentPasswordPrompt({
   tournamentName,
   onPasswordSuccess
 }: TournamentPasswordPromptProps) {
+  const { user } = useAuth();
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!password.trim()) {
       setError('Please enter a password');
+      return;
+    }
+    
+    if (!user?.id) {
+      setError('You must be logged in to access this tournament');
       return;
     }
     
@@ -32,10 +40,13 @@ export default function TournamentPasswordPrompt({
       const isCorrect = await checkTournamentPassword(tournamentId, password);
       
       if (isCorrect) {
-        // Store the fact that this user has entered the correct password for this tournament
-        // This allows them to access all tournament pages without re-entering the password
-        localStorage.setItem(`tournament_access_${tournamentId}`, 'true');
-        onPasswordSuccess();
+        // Store access permission in localStorage with user-specific key
+        localStorage.setItem(`tournament_access_${tournamentId}_${user.id}`, 'true');
+        
+        // Call success callback if provided
+        if (onPasswordSuccess) {
+          onPasswordSuccess();
+        }
       } else {
         setError('Incorrect password. Please try again.');
       }
@@ -46,6 +57,59 @@ export default function TournamentPasswordPrompt({
       setLoading(false);
     }
   };
+
+  const handleVerifyPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    setIsVerifying(true);
+    
+    try {
+      const success = await verifyTournamentPassword(tournamentId, password);
+      
+      if (success) {
+        // Store access permission in localStorage with user-specific key
+        localStorage.setItem(`tournament_access_${tournamentId}_${user?.id}`, 'true');
+        
+        // Call success callback if provided
+        if (onPasswordSuccess) {
+          onPasswordSuccess();
+        }
+      } else {
+        setError('Incorrect password. Please try again.');
+      }
+    } catch (err: any) {
+      console.error('Error verifying password:', err);
+      setError(err.message || 'Failed to verify password. Please try again.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-lg shadow-md p-8">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Login Required</h2>
+              <p className="mt-2 text-sm text-gray-600">
+                You must be logged in to access this password-protected tournament.
+              </p>
+            </div>
+            
+            <div className="flex justify-center">
+              <a
+                href="/login"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700"
+              >
+                Login
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">

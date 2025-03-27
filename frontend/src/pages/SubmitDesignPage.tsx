@@ -21,6 +21,7 @@ export default function SubmitDesignPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [passwordRequired, setPasswordRequired] = useState(false);
   const [hasAccessPermission, setHasAccessPermission] = useState(false);
+  const [maxEntriesReached, setMaxEntriesReached] = useState(false);
 
   // Get the actual tournament ID or handle 'current' specially
   const effectiveTournamentId = tournamentId || 'current';
@@ -33,10 +34,13 @@ export default function SubmitDesignPage() {
     }
 
     const fetchData = async () => {
+      setLoadingData(true);
       try {
-        setLoadingData(true);
-        setError(null);
-        
+        if (!effectiveTournamentId) {
+          setError('Tournament ID is required');
+          return;
+        }
+
         // Handle 'current' by fetching the active tournament
         let actualTournamentId = effectiveTournamentId;
         let tournamentData;
@@ -64,9 +68,9 @@ export default function SubmitDesignPage() {
           return;
         }
         
-        // Check if tournament is in submission phase
+        // Check if submissions are allowed in this tournament's current phase
         if (tournamentData.currentPhase !== 'submission') {
-          setError(`This tournament is currently in the ${tournamentData.currentPhase} phase and is not accepting submissions.`);
+          setError('This tournament is not currently accepting submissions');
           setLoadingData(false);
           return;
         }
@@ -75,86 +79,51 @@ export default function SubmitDesignPage() {
         
         // Check if tournament is password protected
         if (tournamentData.isPasswordProtected) {
-          // Check if user has already provided the password for this tournament
-          const hasAccess = localStorage.getItem(`tournament_access_${actualTournamentId}`) === 'true';
-          
           // Check if user is the owner or an admin (they bypass password protection)
-          const isOwnerOrAdmin = user?.id === tournamentData.ownerId || user?.isAdmin;
+          const isOwnerOrAdmin = user?.id === tournamentData.ownerId || user?.isAdmin === true;
           
-          if (hasAccess || isOwnerOrAdmin) {
-            // User has permission to access this tournament
-            setHasAccessPermission(true);
+          if (!isOwnerOrAdmin) {
+            // Check if user has already provided the password for this tournament
+            const hasAccess = localStorage.getItem(`tournament_access_${actualTournamentId}_${user?.id}`);
             
-            // Fetch user's existing entries for this tournament
-            if (user) {
-              const entries = await getUserEntriesForTournament(user.id, actualTournamentId);
-              setUserEntries(entries);
-              
-              // Check if user has reached entry limit
-              if (tournamentData.maxEntriesPerUser !== null && 
-                  entries.length >= tournamentData.maxEntriesPerUser) {
-                setError(`You have reached the maximum number of entries (${tournamentData.maxEntriesPerUser}) for this tournament.`);
-              }
-            }
-          } else {
-            // Password is required
-            setPasswordRequired(true);
-            setLoadingData(false);
-            return;
-          }
-        } else {
-          // Tournament is not password protected
-          setHasAccessPermission(true);
-          
-          // Fetch user's existing entries for this tournament
-          if (user) {
-            const entries = await getUserEntriesForTournament(user.id, actualTournamentId);
-            setUserEntries(entries);
-            
-            // Check if user has reached entry limit
-            if (tournamentData.maxEntriesPerUser !== null && 
-                entries.length >= tournamentData.maxEntriesPerUser) {
-              setError(`You have reached the maximum number of entries (${tournamentData.maxEntriesPerUser}) for this tournament.`);
+            if (!hasAccess) {
+              setPasswordRequired(true);
+              return;
             }
           }
         }
         
+        setHasAccessPermission(true);
+        
+        // Get user entries for this tournament
+        const userEntries = await getUserEntriesForTournament(actualTournamentId, user?.id || '');
+        setUserEntries(userEntries);
+        
+        // Check if user has reached the maximum number of entries
+        if (tournamentData.maxEntriesPerUser !== null && userEntries.length >= tournamentData.maxEntriesPerUser) {
+          setMaxEntriesReached(true);
+        }
       } catch (err: any) {
-        console.error('Error fetching data:', err);
+        console.error('Error fetching tournament data:', err);
         setError(err.message || 'Failed to load tournament data');
       } finally {
         setLoadingData(false);
       }
     };
-    
+
     if (user) {
       fetchData();
     }
   }, [user, authLoading, navigate, effectiveTournamentId]);
 
   // Handle successful password entry
-  const handlePasswordSuccess = async () => {
+  const handlePasswordSuccess = () => {
     setPasswordRequired(false);
     setHasAccessPermission(true);
-    setLoadingData(true);
     
-    try {
-      if (user && tournament) {
-        // Fetch user's existing entries after password verification
-        const entries = await getUserEntriesForTournament(user.id, tournament.id);
-        setUserEntries(entries);
-        
-        // Check if user has reached entry limit
-        if (tournament.maxEntriesPerUser !== null && 
-            entries.length >= tournament.maxEntriesPerUser) {
-          setError(`You have reached the maximum number of entries (${tournament.maxEntriesPerUser}) for this tournament.`);
-        }
-      }
-    } catch (err: any) {
-      console.error('Error fetching entries:', err);
-      setError(err.message || 'Failed to load tournament data');
-    } finally {
-      setLoadingData(false);
+    // Check if user has reached the maximum number of entries
+    if (tournament?.maxEntriesPerUser !== null && userEntries.length >= tournament.maxEntriesPerUser) {
+      setMaxEntriesReached(true);
     }
   };
 
