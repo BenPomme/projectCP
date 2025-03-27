@@ -43,6 +43,7 @@ export default function VotingPage() {
 
       // Get tournament details
       const tournamentData = await getTournamentById(actualTournamentId);
+      console.log('Tournament found:', tournamentData);
       
       if (!tournamentData) {
         setError('Tournament not found');
@@ -79,7 +80,7 @@ export default function VotingPage() {
       
       setHasAccessPermission(true);
       
-      // Load entries and user votes
+      // Load entries and user votes - ensure tournament state is set first
       await loadEntriesAndVotes();
     } catch (err: any) {
       console.error('Error fetching tournament data:', err);
@@ -99,13 +100,13 @@ export default function VotingPage() {
       console.log(`Found ${entriesData.length} approved entries for tournament ${actualTournamentId}`);
       
       // Get user votes for this tournament
-      if (user) {
+      if (user?.id) {
         const userVotesData = await getUserVotesForTournament(actualTournamentId!, user.id);
         console.log(`Found ${userVotesData.length} votes by user for tournament ${actualTournamentId}`);
         setUserVotes(userVotesData);
         
-        // Check if user has reached vote limit
-        if (tournament?.maxVotesPerUser !== null && userVotesData.length >= tournament.maxVotesPerUser) {
+        // Check if user has reached vote limit - only if tournament is defined
+        if (tournament && tournament.maxVotesPerUser !== null && userVotesData.length >= tournament.maxVotesPerUser) {
           setReachedVoteLimit(true);
         }
       }

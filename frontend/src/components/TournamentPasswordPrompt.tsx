@@ -42,6 +42,11 @@ export default function TournamentPasswordPrompt({
       return;
     }
     
+    if (!password.trim()) {
+      setError('Please enter a password');
+      return;
+    }
+    
     setLoading(true);
     
     try {

@@ -908,13 +908,17 @@ export const checkTournamentPassword = async (
       return false;
     }
     
+    console.log(`Tournament found: ${tournament.name}, isPasswordProtected: ${tournament.isPasswordProtected}`);
+    
     if (!tournament.isPasswordProtected) {
       console.log('Tournament is not password protected');
       return true;
     }
     
     // Compare passwords
-    return tournament.password === password;
+    const isCorrect = tournament.password === password;
+    console.log(`Password comparison result: ${isCorrect}`);
+    return isCorrect;
   } catch (error) {
     console.error('Error checking tournament password:', error);
     return false;

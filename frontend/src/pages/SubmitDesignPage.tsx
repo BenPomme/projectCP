@@ -43,41 +43,21 @@ export default function SubmitDesignPage() {
           return;
         }
 
-        // Handle 'current' by fetching the active tournament
-        let actualTournamentId = actualTournamentId;
-        let tournamentData;
-        
-        if (actualTournamentId === 'current') {
-          console.log('Fetching active tournament...');
-          tournamentData = await getTournamentState();
-          
-          if (!tournamentData) {
-            setError('No active tournament found. Please select a specific tournament.');
-            setIsLoading(false);
-            return;
-          }
-          
-          actualTournamentId = tournamentData.id;
-          console.log(`Found active tournament: ${tournamentData.name} (ID: ${actualTournamentId})`);
-        } else {
-          // Fetch specific tournament data
-          tournamentData = await getTournamentById(actualTournamentId);
-        }
+        // Get tournament details
+        const tournamentData = await getTournamentById(actualTournamentId);
         
         if (!tournamentData) {
-          setError(`Tournament not found. Please go back to the home page and select an active tournament.`);
-          setIsLoading(false);
-          return;
-        }
-        
-        // Check if submissions are allowed in this tournament's current phase
-        if (tournamentData.currentPhase !== 'submission') {
-          setError('This tournament is not currently accepting submissions');
-          setIsLoading(false);
+          setError('Tournament not found');
           return;
         }
         
         setTournament(tournamentData);
+        
+        // Check if submissions are allowed in this tournament's current phase
+        if (tournamentData.currentPhase !== 'submission') {
+          setError('This tournament is not currently accepting submissions');
+          return;
+        }
         
         // Check if tournament is password protected
         if (tournamentData.isPasswordProtected) {
@@ -102,12 +82,14 @@ export default function SubmitDesignPage() {
         setHasAccessPermission(true);
         
         // Get user entries for this tournament
-        const userEntries = await getUserEntriesForTournament(actualTournamentId, user?.id || '');
-        setExistingEntries(userEntries);
-        
-        // Check if user has reached the maximum number of entries
-        if (tournamentData.maxEntriesPerUser !== null && userEntries.length >= tournamentData.maxEntriesPerUser) {
-          setMaxEntriesReached(true);
+        if (user?.id) {
+          const userEntries = await getUserEntriesForTournament(actualTournamentId, user.id);
+          setExistingEntries(userEntries);
+          
+          // Check if user has reached the maximum number of entries
+          if (tournamentData.maxEntriesPerUser !== null && userEntries.length >= tournamentData.maxEntriesPerUser) {
+            setMaxEntriesReached(true);
+          }
         }
       } catch (err: any) {
         console.error('Error fetching tournament data:', err);
@@ -120,7 +102,7 @@ export default function SubmitDesignPage() {
     if (user) {
       fetchData();
     }
-  }, [user, authLoading, navigate, actualTournamentId]);
+  }, [actualTournamentId, user]);
 
   // Handle successful password entry
   const handlePasswordSuccess = () => {
@@ -138,7 +120,29 @@ export default function SubmitDesignPage() {
     
     if (!user) {
       setError('You must be logged in to submit a design');
-      navigate('/login');
+      return;
+    }
+    
+    if (!tournament) {
+      setError('Tournament data not available');
+      return;
+    }
+    
+    if (!hasAccessPermission) {
+      setError('You do not have permission to submit to this tournament');
+      return;
+    }
+    
+    // Check if tournament is in submission phase
+    if (tournament.currentPhase !== 'submission') {
+      setError('This tournament is not currently accepting submissions');
+      return;
+    }
+    
+    // Check if user has reached entry limit
+    if (tournament.maxEntriesPerUser !== null && 
+        existingEntries.length >= tournament.maxEntriesPerUser) {
+      setError(`You have reached the maximum number of entries (${tournament.maxEntriesPerUser}) for this tournament`);
       return;
     }
     
@@ -149,13 +153,6 @@ export default function SubmitDesignPage() {
     
     if (!imageFile) {
       setError('Please upload an image of your design');
-      return;
-    }
-    
-    // Check if user has reached entry limit
-    if (tournament?.maxEntriesPerUser !== null && 
-        existingEntries.length >= tournament.maxEntriesPerUser) {
-      setError(`You have reached the maximum number of entries (${tournament.maxEntriesPerUser}) for this tournament`);
       return;
     }
     
