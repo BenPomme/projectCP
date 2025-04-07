@@ -15,6 +15,7 @@ import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../config/firebase';
 import { trackEvent, AnalyticsEvents } from '../utils/analytics';
 import { useAuthStore } from '../store/authStore';
+import { authAPI } from './api';
 
 export interface User {
   id: string;
@@ -304,8 +305,21 @@ export const handleRedirectResult = async () => {
 // Logout
 export const logout = async (): Promise<void> => {
   try {
+    // Sign out from Firebase Authentication
     await signOut(auth);
+    
+    // Call the backend logout endpoint to clear HTTP-only cookies
+    try {
+      await authAPI.logout();
+    } catch (apiError) {
+      console.error('Error calling logout API:', apiError);
+      // Continue even if API call fails
+    }
+    
+    // Clear auth state from the store
     useAuthStore.getState().logout();
+    
+    // Track event
     trackEvent(AnalyticsEvents.USER_SIGNED_OUT);
   } catch (error) {
     trackEvent(AnalyticsEvents.ERROR_OCCURRED, {

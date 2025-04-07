@@ -11,10 +11,13 @@
     "start": "cd backend && npm start"
   },
   "devDependencies": {
-    "concurrently": "^8.2.0"
+    "@types/js-cookie": "^3.0.6",
+    "concurrently": "^8.2.0",
+    "js-cookie": "^3.0.5"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.15.2",
+    "cookie-parser": "^1.4.7",
     "firebase": "^11.5.0",
     "firebase-admin": "^13.2.0"
   }

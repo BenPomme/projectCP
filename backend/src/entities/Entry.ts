@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany } from 'typeorm';
 import { User } from './User';
 import { Vote } from './Vote';
+import { Tournament } from './Tournament';
 
 @Entity('entries')
 export class Entry {
@@ -21,6 +22,9 @@ export class Entry {
 
   @ManyToOne(() => User, user => user.entries)
   user: User;
+
+  @ManyToOne(() => Tournament, tournament => tournament.entries)
+  tournament: Tournament;
 
   @OneToMany(() => Vote, vote => vote.entry)
   votes: Vote[];

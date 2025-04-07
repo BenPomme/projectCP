@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
 import { Entry } from './Entry';
 import { Vote } from './Vote';
+import { Tournament } from './Tournament';
 
 @Entity('users')
 export class User {
@@ -21,6 +22,9 @@ export class User {
 
   @OneToMany(() => Vote, vote => vote.user)
   votes: Vote[];
+
+  @OneToMany(() => Tournament, tournament => tournament.owner)
+  createdTournaments: Tournament[];
 
   @CreateDateColumn()
   createdAt: Date;

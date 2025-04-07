@@ -1,34 +1,40 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { DataSource } from 'typeorm';
 import userRoutes from './routes/userRoutes';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
-import { ValidationError } from 'express-validator';
+import cookieParser from 'cookie-parser';
+import { validationResult } from 'express-validator';
+import type { ValidationError } from 'express-validator';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/swagger';
-
-// Load environment variables
-dotenv.config();
+import { UserService } from './services/userService';
+import { errorHandler } from './utils/errorHandler';
+import { 
+  SERVER_CONFIG, 
+  DB_CONFIG, 
+  SECURITY_CONFIG, 
+  APP_CONFIG 
+} from './config/env';
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = SERVER_CONFIG.PORT;
 
 // Security middleware
 app.use(helmet());
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
+  windowMs: SECURITY_CONFIG.RATE_LIMIT.WINDOW_MS,
+  max: SECURITY_CONFIG.RATE_LIMIT.MAX_REQUESTS,
+  message: SECURITY_CONFIG.RATE_LIMIT.MESSAGE
 });
-app.use('/api/', limiter);
+app.use(`${SERVER_CONFIG.API_PREFIX}/`, limiter);
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: SERVER_CONFIG.FRONTEND_URL,
   credentials: true
 }));
 
@@ -36,61 +42,40 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Cookie parser middleware
+app.use(cookieParser());
+
 // Swagger documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Database connection
 export const AppDataSource = new DataSource({
   type: 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  username: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-  database: process.env.DB_NAME || 'king_competition',
-  synchronize: process.env.NODE_ENV !== 'production', // Auto-sync in development
-  logging: process.env.NODE_ENV !== 'production',
+  host: DB_CONFIG.HOST,
+  port: DB_CONFIG.PORT,
+  username: DB_CONFIG.USERNAME,
+  password: DB_CONFIG.PASSWORD,
+  database: DB_CONFIG.DATABASE,
+  synchronize: DB_CONFIG.SYNCHRONIZE,
+  logging: DB_CONFIG.LOGGING,
   entities: ['src/entities/**/*.ts'],
   migrations: ['src/migrations/**/*.ts'],
   subscribers: ['src/subscribers/**/*.ts'],
 });
 
 // Routes
-app.use('/api/users', userRoutes);
+app.use(`${SERVER_CONFIG.API_PREFIX}/users`, userRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'Welcome to KING Consumer Product Competition API',
+    message: APP_CONFIG.APP_NAME,
     documentation: '/api-docs'
   });
 });
 
 // Error handling middleware
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
-
-  if (err instanceof ValidationError) {
-    return res.status(400).json({ 
-      error: 'Validation Error',
-      details: err.array()
-    });
-  }
-
-  // Handle specific error types
-  if (err.name === 'UnauthorizedError') {
-    return res.status(401).json({ error: 'Unauthorized access' });
-  }
-
-  if (err.name === 'NotFoundError') {
-    return res.status(404).json({ error: 'Resource not found' });
-  }
-
-  // Default error
-  res.status(500).json({ 
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
-});
+app.use(errorHandler);
 
 // Initialize database connection
 AppDataSource.initialize()
@@ -101,6 +86,7 @@ AppDataSource.initialize()
     app.listen(port, () => {
       console.log(`Server is running on port ${port}`);
       console.log(`API Documentation available at http://localhost:${port}/api-docs`);
+      console.log(`Environment: ${SERVER_CONFIG.NODE_ENV}`);
     });
   })
   .catch((error) => {

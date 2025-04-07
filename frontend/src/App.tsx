@@ -21,8 +21,35 @@ import { handleRedirectResult } from './services/authService';
 import CreateTournamentPage from './pages/CreateTournamentPage';
 import TournamentPage from './pages/TournamentPage';
 
-// Create a client
-const queryClient = new QueryClient();
+// Get cache configuration from environment variables
+const STALE_TIME = import.meta.env.VITE_CACHE_STALE_TIME
+  ? parseInt(import.meta.env.VITE_CACHE_STALE_TIME as string, 10)
+  : 1000 * 60 * 5; // 5 minutes default
+
+const CACHE_TIME = import.meta.env.VITE_CACHE_CACHE_TIME
+  ? parseInt(import.meta.env.VITE_CACHE_CACHE_TIME as string, 10)
+  : 1000 * 60 * 30; // 30 minutes default
+
+// Create a client with configurable caching
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: STALE_TIME,
+      cacheTime: CACHE_TIME,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
+
+// Loading spinner component
+const LoadingSpinner = () => (
+  <div className="flex justify-center items-center min-h-screen" role="status">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600">
+      <span className="sr-only">Loading...</span>
+    </div>
+  </div>
+);
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -35,11 +62,7 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   }, [user, loading]);
   
   if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
   
   return user ? <>{children}</> : <Navigate to="/login" />;
@@ -49,11 +72,7 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   
   if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
   
   // Check if user is an admin or the owner of the tournament
@@ -65,14 +84,14 @@ function App() {
     // Handle the redirect result from Google sign-in
     handleRedirectResult();
     
-    // Set document title
-    document.title = 'King Ideation Platform';
+    // Set document title from environment variable
+    document.title = import.meta.env.VITE_APP_NAME || 'King Ideation Platform';
   }, []);
 
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <Router basename="/projectCP">
+        <Router basename={import.meta.env.VITE_APP_BASE_PATH || "/projectCP"}>
           <Routes>
             <Route path="/" element={<MainLayout />}>
               {/* Public routes */}

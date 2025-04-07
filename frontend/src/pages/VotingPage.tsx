@@ -1,110 +1,71 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { 
-  getTournamentById, 
-  getApprovedEntriesForTournament,
-  submitVote, 
-  getUserVotesForTournament,
-  getTournaments,
-  TournamentState,
-  TournamentEntry,
-  TournamentVote
-} from '../services/firebase';
+import { format } from 'date-fns';
+import { TournamentState, TournamentEntry, TournamentVote } from '../services/firebase';
 import VotingScale from '../components/VotingScale';
 import TournamentPasswordPrompt from '../components/TournamentPasswordPrompt';
-import { format } from 'date-fns';
+import { 
+  useTournament, 
+  useVotingTournaments, 
+  useTournamentEntries, 
+  useUserVotes, 
+  useSubmitVote 
+} from '../hooks/useTournaments';
+
+// Number of entries to display per page from environment variables
+const ENTRIES_PER_PAGE = import.meta.env.VITE_APP_ENTRIES_PER_PAGE 
+  ? parseInt(import.meta.env.VITE_APP_ENTRIES_PER_PAGE as string, 10) 
+  : 9;
 
 export default function VotingPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [tournament, setTournament] = React.useState<TournamentState | null>(null);
-  const [entries, setEntries] = React.useState<TournamentEntry[]>([]);
-  const [userVotes, setUserVotes] = React.useState<TournamentVote[]>([]);
-  const [currentIndex, setCurrentIndex] = React.useState(0);
-  const [error, setError] = React.useState<string | null>(null);
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [passwordRequired, setPasswordRequired] = React.useState(false);
-  const [hasAccessPermission, setHasAccessPermission] = React.useState(false);
-  const [reachedVoteLimit, setReachedVoteLimit] = React.useState(false);
-  const [entriesLoading, setEntriesLoading] = React.useState(true);
-  const [votingTournaments, setVotingTournaments] = React.useState<TournamentState[]>([]);
   
-  // Get the actual tournament ID
-  const actualTournamentId = tournamentId;
-
-  // Fetch available voting tournaments
-  React.useEffect(() => {
-    const fetchVotingTournaments = async () => {
-      try {
-        setIsLoading(true);
-        const allTournaments = await getTournaments();
-        
-        // Filter to only tournaments in voting phase
-        const tournamentsInVotingPhase = allTournaments.filter(
-          t => t.currentPhase === 'voting'
-        );
-        
-        console.log(`Found ${tournamentsInVotingPhase.length} tournaments in voting phase`);
-        setVotingTournaments(tournamentsInVotingPhase);
-        
-        // If we have a tournament ID, fetch that specific tournament
-        if (actualTournamentId) {
-          fetchData();
-        } else {
-          setIsLoading(false);
-        }
-      } catch (err) {
-        console.error('Error fetching voting tournaments:', err);
-        setError('Failed to load available tournaments');
-        setIsLoading(false);
-      }
-    };
-    
-    fetchVotingTournaments();
-  }, []);
-
-  const fetchData = async () => {
-    setIsLoading(true);
-    try {
-      if (!actualTournamentId) {
-        setError('Tournament ID is required');
-        return;
-      }
-
-      // Get tournament details
-      const tournamentData = await getTournamentById(actualTournamentId);
-      console.log('Tournament found:', tournamentData);
-      
-      if (!tournamentData) {
-        setError('Tournament not found');
-        return;
-      }
-      
-      setTournament(tournamentData);
-      
-      // Check if voting is allowed in this tournament's current phase
-      if (tournamentData.currentPhase !== 'voting') {
-        setError('This tournament is not currently in the voting phase');
-        return;
-      }
-      
-      // Check if tournament is password protected
-      if (tournamentData.isPasswordProtected) {
-        console.log('Tournament is password protected');
+  // State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [error, setError] = useState<string | null>(null);
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [hasAccessPermission, setHasAccessPermission] = useState(false);
+  const [shuffledEntryIds, setShuffledEntryIds] = useState<string[]>([]);
+  
+  // React Query hooks
+  const { 
+    data: votingTournaments = [], 
+    isLoading: tournamentsLoading 
+  } = useVotingTournaments();
+  
+  const {
+    data: tournament,
+    isLoading: tournamentLoading
+  } = useTournament(tournamentId);
+  
+  const {
+    data: entries = [],
+    isLoading: entriesLoading
+  } = useTournamentEntries(hasAccessPermission ? tournamentId : undefined);
+  
+  const {
+    data: userVotes = [],
+    isLoading: votesLoading
+  } = useUserVotes(tournamentId, user?.id);
+  
+  const submitVoteMutation = useSubmitVote();
+  
+  // Effects to check access and shuffle entries
+  useEffect(() => {
+    // If tournament data is loaded, check if password is required
+    if (tournament && !hasAccessPermission) {
+      if (tournament.isPasswordProtected) {
         // Check if user is the owner (they bypass password protection)
-        const isOwner = user?.id === tournamentData.ownerId;
-        console.log('Is user owner?', isOwner);
+        const isOwner = user?.id === tournament.ownerId;
         
         if (!isOwner) {
           // Check if user has already provided the password for this tournament
-          const hasAccess = localStorage.getItem(`tournament_access_${actualTournamentId}_${user?.id}`);
-          console.log('Has access from localStorage?', !!hasAccess);
+          const hasAccess = localStorage.getItem(`tournament_access_${tournamentId}_${user?.id}`);
           
           if (!hasAccess) {
-            console.log('Setting passwordRequired to true');
             setPasswordRequired(true);
             return;
           }
@@ -112,67 +73,53 @@ export default function VotingPage() {
       }
       
       setHasAccessPermission(true);
-      
-      // Load entries and user votes - ensure tournament state is set first
-      await loadEntriesAndVotes();
-    } catch (err: any) {
-      console.error('Error fetching tournament data:', err);
-      setError(err.message || 'Failed to load tournament data');
-    } finally {
-      setIsLoading(false);
     }
-  };
-
-  // Load entries and user votes
-  const loadEntriesAndVotes = async () => {
-    try {
-      setEntriesLoading(true);
-      
-      if (!actualTournamentId) {
-        console.error('No tournament ID provided to load entries');
-        return;
-      }
-      
-      // Get approved entries for this tournament
-      const entriesData = await getApprovedEntriesForTournament(actualTournamentId);
-      console.log(`Found ${entriesData.length} approved entries for tournament ${actualTournamentId}`);
-      
-      // Get user votes for this tournament
-      if (user?.id) {
-        const userVotesData = await getUserVotesForTournament(actualTournamentId, user.id);
-        console.log(`Found ${userVotesData.length} votes by user for tournament ${actualTournamentId}`);
-        setUserVotes(userVotesData);
-        
-        // Check if user has reached vote limit - only if tournament is defined
-        if (tournament && tournament.maxVotesPerUser !== null && userVotesData.length >= tournament.maxVotesPerUser) {
-          setReachedVoteLimit(true);
-        }
-      }
-      
-      // Create a shuffled copy of entries for voting
-      const shuffledEntries = [...entriesData].sort(() => Math.random() - 0.5);
-      setEntries(shuffledEntries);
-    } catch (err: any) {
-      console.error('Error loading entries and votes:', err);
-      setError(err.message || 'Failed to load entries');
-    } finally {
-      setEntriesLoading(false);
+  }, [tournament, tournamentId, user, hasAccessPermission]);
+  
+  // Shuffle entries once they're loaded
+  useEffect(() => {
+    if (entries.length > 0 && shuffledEntryIds.length === 0) {
+      // Create array of entry IDs and shuffle them
+      const entryIds = entries.map(entry => entry.id);
+      const shuffled = [...entryIds].sort(() => Math.random() - 0.5);
+      setShuffledEntryIds(shuffled);
     }
-  };
-
-  React.useEffect(() => {
-    if (user && actualTournamentId) {
-      fetchData();
+  }, [entries, shuffledEntryIds.length]);
+  
+  // Compute derived values
+  const reachedVoteLimit = useMemo(() => {
+    if (!tournament || tournament.maxVotesPerUser === null || tournament.maxVotesPerUser === undefined) {
+      return false;
     }
-  }, [actualTournamentId, user]);
+    return userVotes.length >= tournament.maxVotesPerUser;
+  }, [tournament, userVotes.length]);
+  
+  // Order entries based on shuffled IDs
+  const orderedEntries = useMemo(() => {
+    if (shuffledEntryIds.length === 0) return entries;
+    
+    // Create a map for faster lookup
+    const entryMap = new Map(entries.map(entry => [entry.id, entry]));
+    
+    // Return entries in shuffled order
+    return shuffledEntryIds
+      .map(id => entryMap.get(id))
+      .filter(entry => entry !== undefined) as TournamentEntry[];
+  }, [entries, shuffledEntryIds]);
+  
+  // Calculate pagination
+  const totalPages = Math.ceil(orderedEntries.length / ENTRIES_PER_PAGE);
+  
+  const displayedEntries = useMemo(() => {
+    const startIndex = (currentPage - 1) * ENTRIES_PER_PAGE;
+    const endIndex = startIndex + ENTRIES_PER_PAGE;
+    return orderedEntries.slice(startIndex, endIndex);
+  }, [orderedEntries, currentPage]);
 
   // Handle successful password entry
   const handlePasswordSuccess = async () => {
     setPasswordRequired(false);
     setHasAccessPermission(true);
-    
-    // Load entries and votes after password verification
-    await loadEntriesAndVotes();
   };
 
   const handleVote = async (entryId: string, rating: number) => {
@@ -186,59 +133,175 @@ export default function VotingPage() {
       return;
     }
     
-    try {
-      // Check if user has already voted for this entry
-      if (userVotes.some(vote => vote.entryId === entryId)) {
-        setError('You have already voted for this entry');
+    // Check if user has already voted for this entry
+    if (userVotes.some(vote => vote.entryId === entryId)) {
+      setError('You have already voted for this entry');
+      return;
+    }
+
+    // Check if user has reached vote limit
+    if (tournament.maxVotesPerUser !== null && tournament.maxVotesPerUser !== undefined) {
+      if (userVotes.length >= tournament.maxVotesPerUser) {
+        setError(`You have reached the maximum number of votes (${tournament.maxVotesPerUser})`);
         return;
       }
+    }
 
-      // Check if user has reached vote limit
-      if (tournament?.maxVotesPerUser !== null && tournament?.maxVotesPerUser !== undefined) {
-        const voteCount = userVotes.length;
-        if (voteCount >= tournament.maxVotesPerUser) {
-          setError(`You have reached the maximum number of votes (${tournament.maxVotesPerUser})`);
-          return;
-        }
-      }
-
-      console.log(`Submitting vote: Entry ID ${entryId}, Rating ${rating}, Tournament ID ${tournament.id}`);
-      setIsSubmitting(true);
+    try {
+      // Submit vote using mutation
+      await submitVoteMutation.mutateAsync({
+        entryId,
+        rating,
+        tournamentId: tournament.id
+      });
       
-      try {
-        await submitVote(entryId, rating, tournament.id);
-        console.log('Vote submitted successfully');
-        
-        // Update local state temporarily
-        setUserVotes(prev => [...prev, { entryId, rating }]);
-        
-        // Reload data
-        console.log('Reloading data after vote...');
-        await fetchData();
-        
-        setError(null);
-      } catch (voteError: any) {
-        console.error('Error during vote submission:', voteError);
-        setError(`Failed to submit vote: ${voteError.message}`);
-      } finally {
-        setIsSubmitting(false);
-      }
-    } catch (err) {
-      setError('Failed to submit vote');
+      setError(null);
+    } catch (err: any) {
       console.error('Error submitting vote:', err);
+      setError(err.message || 'Failed to submit vote');
     }
   };
 
+  // Handle page changes
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(prev => prev + 1);
+      // Scroll to top when changing pages
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(prev => prev - 1);
+      // Scroll to top when changing pages
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      // Scroll to top when changing pages
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Pagination UI component
+  const Pagination = () => {
+    // Don't show pagination if there's only one page
+    if (totalPages <= 1) return null;
+
+    // Create array of page numbers to display
+    const pageNumbers = [];
+    const maxPageButtons = 5; // Maximum number of page buttons to show
+    
+    let startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
+    let endPage = Math.min(totalPages, startPage + maxPageButtons - 1);
+    
+    // Adjust start page if we're near the end
+    if (endPage - startPage + 1 < maxPageButtons) {
+      startPage = Math.max(1, endPage - maxPageButtons + 1);
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(i);
+    }
+
+    return (
+      <div className="flex justify-center mt-8">
+        <nav className="flex items-center space-x-2" aria-label="Pagination">
+          <button
+            onClick={goToPreviousPage}
+            disabled={currentPage === 1}
+            className={`px-3 py-2 rounded-md ${
+              currentPage === 1
+                ? 'text-gray-400 cursor-not-allowed'
+                : 'text-gray-700 hover:bg-gray-100'
+            }`}
+            aria-label="Go to previous page"
+          >
+            Previous
+          </button>
+          
+          {startPage > 1 && (
+            <>
+              <button
+                onClick={() => goToPage(1)}
+                className="px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100"
+                aria-label="Go to first page"
+              >
+                1
+              </button>
+              {startPage > 2 && (
+                <span className="px-2 py-2 text-gray-500">...</span>
+              )}
+            </>
+          )}
+          
+          {pageNumbers.map(number => (
+            <button
+              key={number}
+              onClick={() => goToPage(number)}
+              className={`px-3 py-2 rounded-md ${
+                currentPage === number
+                  ? 'bg-primary-600 text-white'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+              aria-label={`Go to page ${number}`}
+              aria-current={currentPage === number ? 'page' : undefined}
+            >
+              {number}
+            </button>
+          ))}
+          
+          {endPage < totalPages && (
+            <>
+              {endPage < totalPages - 1 && (
+                <span className="px-2 py-2 text-gray-500">...</span>
+              )}
+              <button
+                onClick={() => goToPage(totalPages)}
+                className="px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100"
+                aria-label={`Go to last page, page ${totalPages}`}
+              >
+                {totalPages}
+              </button>
+            </>
+          )}
+          
+          <button
+            onClick={goToNextPage}
+            disabled={currentPage === totalPages}
+            className={`px-3 py-2 rounded-md ${
+              currentPage === totalPages
+                ? 'text-gray-400 cursor-not-allowed'
+                : 'text-gray-700 hover:bg-gray-100'
+            }`}
+            aria-label="Go to next page"
+          >
+            Next
+          </button>
+        </nav>
+      </div>
+    );
+  };
+
+  // Loading state
+  const isLoading = tournamentLoading || (tournamentId ? entriesLoading || votesLoading : tournamentsLoading);
+  
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" role="status">
+          <span className="sr-only">Loading...</span>
+        </div>
       </div>
     );
   }
 
   // If no tournament is selected, show list of available voting tournaments
-  if (!actualTournamentId) {
+  if (!tournamentId) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-3xl font-bold mb-8">Vote on Tournaments</h1>
@@ -308,11 +371,12 @@ export default function VotingPage() {
     );
   }
 
-  if (error || !tournament) {
+  // Error state
+  if ((error && !submitVoteMutation.isError) || !tournament) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-red-50 border border-red-200 rounded-md p-4">
-          <p className="text-red-700">{error || "Tournament data not available"}</p>
+          <p className="text-red-700" role="alert">{error || "Tournament data not available"}</p>
           <button 
             className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
             onClick={() => navigate('/vote')}
@@ -324,6 +388,26 @@ export default function VotingPage() {
     );
   }
 
+  // Check if tournament is in voting phase
+  if (tournament.currentPhase !== 'voting') {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
+          <p className="text-yellow-700" role="alert">
+            This tournament is not currently in the voting phase.
+          </p>
+          <button 
+            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+            onClick={() => navigate('/vote')}
+          >
+            Return to Voting Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Main content
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-3xl font-bold mb-8">
@@ -351,44 +435,67 @@ export default function VotingPage() {
         <div className="mt-4 text-sm text-gray-500">
           <p>Voting Ends: <span className="font-medium text-gray-900">{tournament?.votingPhaseEnd.toLocaleDateString()}</span></p>
         </div>
+        {orderedEntries.length > 0 && (
+          <div className="mt-4 text-sm text-gray-500">
+            <p>Showing page {currentPage} of {totalPages} ({orderedEntries.length} total entries)</p>
+          </div>
+        )}
       </div>
       
-      {entries.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {entries.map((entry) => (
-            <div key={entry.id} className="bg-white rounded-lg shadow-md p-6">
-              <div className="aspect-w-16 aspect-h-9 mb-4">
-                <img
-                  src={entry.imageUrl}
-                  alt={entry.title}
-                  className="object-cover rounded-lg"
+      {/* Display error from vote submission if any */}
+      {submitVoteMutation.isError && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-8">
+          <p className="text-red-700" role="alert">
+            {submitVoteMutation.error instanceof Error 
+              ? submitVoteMutation.error.message 
+              : 'Failed to submit vote. Please try again.'}
+          </p>
+        </div>
+      )}
+      
+      {displayedEntries.length > 0 ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {displayedEntries.map((entry) => (
+              <div key={entry.id} className="bg-white rounded-lg shadow-md p-6">
+                <div className="aspect-w-16 aspect-h-9 mb-4">
+                  <img
+                    src={entry.imageUrl}
+                    alt={entry.title}
+                    className="object-cover rounded-lg"
+                    loading="lazy" // Add lazy loading for better performance
+                  />
+                </div>
+                
+                <h3 className="text-lg font-semibold mb-2">{entry.title}</h3>
+                <p className="text-gray-600 mb-4">{entry.description}</p>
+                
+                {/* Display vote count and average rating */}
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center">
+                    <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    <span className="ml-1 text-sm font-medium text-gray-800">
+                      {entry.averageRating ? entry.averageRating.toFixed(1) : '0.0'} ({entry.voteCount || 0} votes)
+                    </span>
+                  </div>
+                </div>
+                
+                <VotingScale
+                  entryId={entry.id}
+                  onVote={(rating) => handleVote(entry.id, rating)}
+                  currentRating={userVotes.find(vote => vote.entryId === entry.id)?.rating}
+                  tournamentState={tournament}
+                  entryTitle={entry.title}
                 />
               </div>
-              
-              <h3 className="text-lg font-semibold mb-2">{entry.title}</h3>
-              <p className="text-gray-600 mb-4">{entry.description}</p>
-              
-              {/* Display vote count and average rating */}
-              <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center">
-                  <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                  <span className="ml-1 text-sm font-medium text-gray-800">
-                    {entry.averageRating ? entry.averageRating.toFixed(1) : '0.0'} ({entry.voteCount || 0} votes)
-                  </span>
-                </div>
-              </div>
-              
-              <VotingScale
-                entryId={entry.id}
-                onVote={(rating) => handleVote(entry.id, rating)}
-                currentRating={userVotes.find(vote => vote.entryId === entry.id)?.rating}
-                tournamentState={tournament}
-              />
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+          
+          {/* Pagination controls */}
+          <Pagination />
+        </>
       ) : (
         <div className="bg-white rounded-lg shadow-md p-6 text-center">
           <p className="text-gray-600">No entries available for voting.</p>
