@@ -68,6 +68,26 @@ export function useTournaments(page = 1, limit = 10, phase?: string) {
   });
 }
 
+// Get tournaments in voting phase
+export function useVotingTournaments() {
+  return useQuery({
+    queryKey: tournamentKeys.list({ phase: 'voting' }),
+    queryFn: async () => {
+      try {
+        const response = await tournamentAPI.getTournaments(1, 100, 'voting');
+        return response.data.data as TournamentState[];
+      } catch (error) {
+        console.error('Error fetching voting tournaments:', error);
+        toast.error(formatErrorMessage(error));
+        throw error;
+      }
+    },
+    staleTime: import.meta.env.VITE_CACHE_STALE_TIME 
+      ? parseInt(import.meta.env.VITE_CACHE_STALE_TIME) 
+      : 5 * 60 * 1000, // 5 minutes default
+  });
+}
+
 // Get tournaments with infinite scrolling
 export function useInfiniteTournaments(limit = 10, phase?: string) {
   return useInfiniteQuery({
@@ -187,7 +207,7 @@ export function useEntry(entryId: string | undefined) {
 }
 
 // Get user votes for a tournament
-export function useUserVotes(tournamentId: string | undefined) {
+export function useUserVotes(tournamentId: string | undefined, userId?: string) {
   return useQuery({
     queryKey: tournamentId ? tournamentKeys.votes(tournamentId, 'current') : null,
     queryFn: async () => {
